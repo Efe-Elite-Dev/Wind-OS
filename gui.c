@@ -1,19 +1,15 @@
 #include "wind_subsystem.h"
 
-/* Masaüstünü pır-pır etmeden tamamen arka planda boyayan motor */
-void gui_refresh_desktop(void) {
-    /* Tüm ekranı asil Wind OS Gece Mavisi rengine boyuyoruz */
-    for (int y = 0; y < 600; y++) {
-        for (int x = 0; x < 800; x++) {
-            /* Doğrudan draw_pixel_pure çağırarak back_buffer'a yazar */
-            draw_pixel_pure(x, y, 0x000B1E36); 
-        }
+void draw_window_pure(int x, int y, int width, int height, uint32_t border_color) {
+    // Üst ve Alt Çizgileri Piksel Piksel Çiz
+    for (int i = 0; i < width; i++) {
+        draw_pixel_pure(x + i, y, border_color);          // Üst kenar
+        draw_pixel_pure(x + i, y + height, border_color); // Alt kenar
     }
     
-    /* En alta şık bir görev çubuğu (Taskbar) alanı çekelim */
-    for (int y = 560; y < 600; y++) {
-        for (int x = 0; x < 800; x++) {
-            draw_pixel_pure(x, y, 0x00111111);
-        }
+    // Sağ ve Sol Çizgileri Piksel Piksel Çiz
+    for (int i = 0; i < height; i++) {
+        draw_pixel_pure(x, y + i, border_color);         // Sol kenar
+        draw_pixel_pure(x + width, y + i, border_color); // Sağ kenar
     }
 }
