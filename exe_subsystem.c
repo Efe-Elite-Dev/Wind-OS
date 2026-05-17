@@ -1,8 +1,12 @@
 #include "wind_subsystem.h"
+#include "exe_subsystem.h" /* Kendi başlık dosyasını dahil ederek prototipleri kilitliyoruz */
 
-/* DİKKAT: draw_pixel_pure fonksiyonu linker çakışmasını engellemek için buradan TAMAMEN silindi!
-   Sistem artık pikselleri doğrudan screen.c içindeki zırhlı sürücüden okuyor.
-*/
+/* Harici grafik dosyalarından fonksiyonları güvenli bir şekilde bağlıyoruz */
+extern void draw_pixel_pure(int x, int y, uint32_t color);
+extern void draw_window_pure(int x, int y, int width, int height, uint32_t border_color);
+
+/* OOBE aşamalarını takip eden global değişkenin tanımı (Header'daki extern'i besler) */
+int setup_stage = 0;
 
 /* Özel pencereler ve arayüz bileşenleri için gövde doldurma fonksiyonu */
 void draw_custom_window(int x, int y, int width, int height, const char* title, uint32_t body_color) {
