@@ -1,5 +1,14 @@
 #include "setup.h"
 
+// Başlık dosyası senkronizasyon hatalarını önlemek için makroları buraya sabitliyoruz
+#ifndef COLOR_WIND_3D_LIGHT
+#define COLOR_WIND_3D_LIGHT  22  // Parlayan 3D Kenar Işığı (Beyaz)
+#endif
+
+#ifndef COLOR_WIND_3D_DARK
+#define COLOR_WIND_3D_DARK   23  // Derin 3D Kenar Gölgesi (Koyu Gri)
+#endif
+
 extern void outb(uint16_t port, uint8_t val);
 
 static SetupStage current_stage = STAGE_COUNTRY;
