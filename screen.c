@@ -1,41 +1,53 @@
 #include "wind_subsystem.h"
 
-/* kernel.c içindeki akıcı arabelleğe dışarıdan bağlanıyoruz */
-extern uint32_t* back_buffer;
+/* Ekran Çözünürlük Standartları */
+#define SCREEN_WIDTH 800
+#define SCREEN_HEIGHT 600
 
-/* DİKKAT: outb ve inb fonksiyonları wind_subsystem.c içinde zaten 
-   tanımlandığı için, linker'ın "multiple definition" (mükerrer tanım) 
-   hatası vermesini engellemek amacıyla buradan tamamen KALDIRILDI! 
-   Sistem artık merkezi I/O portlarını kullanacak.
-*/
+/* Harici VRAM İşaretçileri (kernel.c içindeki ana işaretçiyi besler) */
+extern uint32_t* vbe_vram;
+extern uint32_t vbe_pitch;
 
+/* DÜZELTME: Linker'ın aradığı o meşhur arka bellek arabelleği (Double Buffer) resmi tanımı! */
+uint32_t back_buffer[SCREEN_WIDTH * SCREEN_HEIGHT];
+
+/**
+ * @brief Grafik modunu ve arka belleği (Back Buffer) ilk aşama için temizler.
+ */
 void init_graph_mode(void) {
-    /* VBE modu GRUB ve boot.asm tarafından otomatik kuruluyor */
+    for (int i = 0; i < (SCREEN_WIDTH * SCREEN_HEIGHT); i++) {
+        back_buffer[i] = 0x00000000; // Saf siyah ile ön hazırlık
+    }
 }
 
+/**
+ * @brief Arka belleğe (Back Buffer) pürüzsüz ve saf bir piksel basar.
+ */
 void draw_pixel_pure(int x, int y, uint32_t color) {
-    /* Ekrandan taşma kontrolü (Sanal makine çökmesini engeller) */
-    if (x < 0 || x >= 800 || y < 0 || y >= 600) return;
-    
-    /* Doğrudan 32MB güvenli arabelleğe yaz */
-    if (back_buffer != 0) {
-        back_buffer[y * 800 + x] = color;
+    if (x >= 0 && x < SCREEN_WIDTH && y >= 0 && y < SCREEN_HEIGHT) {
+        back_buffer[y * SCREEN_WIDTH + x] = color;
     }
 }
 
+/**
+ * @brief Tüm arka belleği tek bir renk ile kaplar.
+ */
 void clear_screen_gfx(uint32_t color) {
-    for (int y = 0; y < 600; y++) {
-        for (int x = 0; x < 800; x++) {
-            draw_pixel_pure(x, y, color);
-        }
+    for (int i = 0; i < (SCREEN_WIDTH * SCREEN_HEIGHT); i++) {
+        back_buffer[i] = color;
     }
 }
 
-void clear_text_screen(void) {
-    /* Eski text modundan kalma temizlik fonksiyonu */
-    char* vga_text = (char*)0xB8000;
-    for (int i = 0; i < 80 * 25 * 2; i += 2) {
-        vga_text[i] = ' ';
-        vga_text[i+1] = 0x07;
+/**
+ * @brief Arka bellekteki (Back Buffer) tüm veriyi tek seferde gerçek VRAM'e üfler.
+ * Bu fonksiyon gui.c içindeki gui_refresh_desktop tarafından çağrılacaktır.
+ */
+void screen_flush(void) {
+    if (vbe_vram == 0) return;
+    
+    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+        for (int x = 0; x < SCREEN_WIDTH; x++) {
+            vbe_vram[y * (vbe_pitch / 4) + x] = back_buffer[y * SCREEN_WIDTH + x];
+        }
     }
 }
