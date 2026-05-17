@@ -5,7 +5,8 @@
 
 /* =============================================================================
    MERKEZİ GRAFİK KULLANICI ARAYÜZÜ (GUI) PROTOTİPLERİ
-   ============================================================================= */
+   =============================================================================
+ */
 
 /**
  * @brief Masaüstü arka plan grafiklerini ve temel GUI bileşenlerini tazeler.
@@ -19,8 +20,10 @@ void gui_refresh_desktop(void);
  * @param y Pencerenin sol üst Y koordinatı
  * @param width Pencerenin genişliği (piksel cinsinden)
  * @param height Pencerenin yüksekliği (piksel cinsinden)
- * @param border_color Pencerenin çerçeve ve başlık çubuğu rengi (32-bit ARGB/XRGB)
+ * @param border_color Pencerenin çerçeve ve başlık çubuğu rengi (32-bit
+ * ARGB/XRGB)
  */
-void draw_window_pure(int x, int y, int width, int height, uint32_t border_color);
+void draw_window_pure(int x, int y, int width, int height,
+                      uint32_t border_color);
 
 #endif /* GUI_H */
