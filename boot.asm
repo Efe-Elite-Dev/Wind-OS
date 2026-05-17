@@ -1,9 +1,11 @@
-; Wind OS Bootloader - Sky OS Engine Compatible
+; =======================================================
+; Wind OS / Sky-OS Hibrit Çekirdek Giriş Noktası
+; =======================================================
 MBOOT_PAGE_ALIGN    equ 1 << 0
-MBOOT_MEMORY_INFO   equ 1 << 1
-MBOOT_GRAPHICS_MODE equ 1 << 2
-MBOOT_FLAGS         equ MBOOT_PAGE_ALIGN | MBOOT_MEMORY_INFO | MBOOT_GRAPHICS_MODE
+MBOOT_MEM_INFO      equ 1 << 1
+MBOOT_GRAPHICS      equ 1 << 2  ; Grafik modu desteği istiyoruz
 MBOOT_MAGIC         equ 0x1BADB002
+MBOOT_FLAGS         equ MBOOT_PAGE_ALIGN | MBOOT_MEM_INFO | MBOOT_GRAPHICS
 MBOOT_CHECKSUM      equ -(MBOOT_MAGIC + MBOOT_FLAGS)
 
 section .multiboot
@@ -12,33 +14,32 @@ align 4
     dd MBOOT_FLAGS
     dd MBOOT_CHECKSUM
     
-    ; VBE Grafik Modu Gereksinimleri (800x600x32)
+    ; Grafik Bilgileri (GRUB bizim için 320x200x8 modunu açacak)
     dd 0
     dd 0
     dd 0
     dd 0
-    dd 0
-    dd 800
-    dd 600
-    dd 32
+    dd 0        ; 0 = Linear Grafik Modu
+    dd 320      ; Genişlik
+    dd 200      ; Yükseklik
+    dd 8        ; Renk Derinliği (256 Renk)
 
 section .text
-global start
+global _start
 extern kernel_main
 
-start:
-    cli                         ; Kesmeleri kapat
-    mov esp, stack_top          ; DÜZELTME: Stack göstergesini 8KB'lık alanın en tepesine ayarla!
-    
-    push ebx                    ; Multiboot info yapısının adresini stack'e it (mboot parametresi)
-    call kernel_main            ; C çekirdeğine atla
+_start:
+    mov esp, stack_space + 4096  ; 4KB Güvenli Yığın Alanı
+    push eax                     ; Multiboot Sihirli Numarası
+    push ebx                     ; Multiboot Bilgi Yapısı Adresi
+    call kernel_main
     
 .halt:
+    cli
     hlt
     jmp .halt
 
 section .bss
 align 16
-stack_bottom:
-    resb 8192                   ; 8KB Güvenli Stack Alanı
-stack_top:                      ; Stack'in başlangıç (en üst) noktası
+stack_space:
+    resb 4096
