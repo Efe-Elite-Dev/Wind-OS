@@ -1,4 +1,4 @@
-name: Build Wind OS (Sky OS Engine)
+name: Wind OS CI Build Pipeline
 
 on:
   push:
@@ -8,29 +8,40 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
-    permissions:
-      contents: write
+    runs-on: ubuntu-latest
 
     steps:
     - name: Depoyu Klonla (Checkout)
       uses: actions/checkout@v4
 
-    - name: Evrensel Derleme ve Yapay Zeka Bağımlılıklarını Kur
+    - name: Sistem ve Derleme Araçlarını Kur (VGA & ISO Grubu)
       run: |
         sudo apt-get update
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -yq \
-          nasm gcc mtools xorriso grub-pc-bin grub-efi-ia32-bin grub-efi-amd64-bin \
-          grub-common libisoburn-dev dos2unix grep sed gawk curl jq
+        sudo apt-get install -y nasm gcc-multilib build-essential grub-pc-bin xorriso mtools
 
-    - name: Otonom AI Derleme ve Canlı Sistem Onarım Motorunu Çalıştır
+    - name: Dosya Bütünlüğü ve Setup Modülü Kontrolü
+      run: |
+        if [ ! -f "setup.c" ] || [ ! -f "setup.h" ]; then
+          echo "HATA: setup.c veya setup.h ana dizinde bulunamadı!"
+          exit 1
+        fi
+        echo "Kurulum modülü dosyaları doğrulandı."
+
+    - name: Wind OS Derleme Motorunu Ateşle (build.sh)
       run: |
         chmod +x build.sh
         ./build.sh
 
-    - name: ISO'yu Actions Artifact Alanına Yükle
+    - name: Nihai ISO Bütünlük Kontrolü
+      run: |
+        if [ ! -f "windos.iso" ]; then
+          echo "HATA: Kritik sistem hatası, windos.iso üretilemedi!"
+          exit 1
+        fi
+        echo "Doğrulama Başarılı: windos.iso başarıyla mühürlendi."
+
+    - name: ISO Çıktısını Artifact Olarak Kaydet
       uses: actions/upload-artifact@v4
       with:
-        name: windos-release
+        name: windos-iso-build
         path: windos.iso
-        if-no-files-found: error
