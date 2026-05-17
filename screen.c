@@ -3,15 +3,11 @@
 /* kernel.c içindeki akıcı arabelleğe dışarıdan bağlanıyoruz */
 extern uint32_t* back_buffer;
 
-void outb(unsigned short port, unsigned char val) {
-    __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-
-unsigned char inb(unsigned short port) {
-    unsigned char result;
-    __asm__ volatile("inb %1, %0" : "=a"(result) : "Nd"(port));
-    return result;
-}
+/* DİKKAT: outb ve inb fonksiyonları wind_subsystem.c içinde zaten 
+   tanımlandığı için, linker'ın "multiple definition" (mükerrer tanım) 
+   hatası vermesini engellemek amacıyla buradan tamamen KALDIRILDI! 
+   Sistem artık merkezi I/O portlarını kullanacak.
+*/
 
 void init_graph_mode(void) {
     /* VBE modu GRUB ve boot.asm tarafından otomatik kuruluyor */
@@ -22,7 +18,9 @@ void draw_pixel_pure(int x, int y, uint32_t color) {
     if (x < 0 || x >= 800 || y < 0 || y >= 600) return;
     
     /* Doğrudan 32MB güvenli arabelleğe yaz */
-    back_buffer[y * 800 + x] = color;
+    if (back_buffer != 0) {
+        back_buffer[y * 800 + x] = color;
+    }
 }
 
 void clear_screen_gfx(uint32_t color) {
