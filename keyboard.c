@@ -1,4 +1,5 @@
 #include "wind_subsystem.h"
+#include "keyboard.h" /* Kendi başlık dosyasını dahil ederek prototipleri kilitliyoruz */
 
 #define KEYBOARD_DATA_PORT 0x60
 #define KEYBOARD_STATUS_PORT 0x64
@@ -9,6 +10,8 @@ static int keyboard_ai_cadence_score = 0;
 
 void init_keyboard(void) {
     /* İleride PIC kesme denetleyicisi maskeleri buraya kilitlenecek */
+    keyboard_stroke_count = 0;
+    keyboard_ai_cadence_score = 0;
 }
 
 /* KLAVYE YAPAY ZEKASI: Tuşa basma sıklığına göre zamanlayıcıya tempo katsayısı üretir */
@@ -55,6 +58,9 @@ void check_keyboard_pure(void) {
             if (ascii != 0) {
                 /* Yerel Yapay Zeka ajanını tetikle */
                 keyboard_stroke_count += 4;
+                
+                /* Emniyet kilidi: Sayacın sonsuza gidip taşmasını engelle */
+                if (keyboard_stroke_count > 100) keyboard_stroke_count = 100;
             }
         }
         last_kb_scancode = scancode;
