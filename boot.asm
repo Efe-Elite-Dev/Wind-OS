@@ -1,5 +1,5 @@
 ; =======================================================
-; Wind OS / Sky-OS Hibrit Çekirdek Giriş Noktası
+; Wind OS / Sky-OS Hibrit Çekirdek Giriş Noktası (Saf Metin Girişi)
 ; =======================================================
 MBOOT_PAGE_ALIGN    equ 1 << 0
 MBOOT_MEM_INFO      equ 1 << 1
