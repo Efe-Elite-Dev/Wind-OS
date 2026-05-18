@@ -12,7 +12,7 @@ echo "[1] Çekirdek önyükleme mekanizması derleniyor (boot.asm)..."
 nasm -f elf32 boot.asm -o boot.o
 
 echo "[2] Çekirdek ve tüm alt sistemler derleniyor..."
-# Klasördeki tüm .c dosyalarını tek tek döngüyle 32-bit ELF nesne dosyasına çeviriyoruz
+# Sadece .c dosyalarını derleyip .o dosyalarını üretiyoruz
 for c_file in *.c; do
     if [ -f "$c_file" ]; then
         obj_file="${c_file%.c}.o"
@@ -22,8 +22,9 @@ for c_file in *.c; do
 done
 
 echo "[3] Tüm nesne dosyaları linker.ld şablonuna göre birleştiriliyor..."
-# boot.o ve klasörde derlenmiş ne kadar .o dosyası varsa hepsini linker'a gönderiyoruz
-ld -m elf_i386 -T linker.ld -o kernel.bin boot.o *.o --no-warn-rwx-segments
+# ÇAKIŞMA ÇÖZÜLDÜ: boot.o zaten *.o maskesinin içinde kalmasın diye, 
+# önce boot.o'yu veriyoruz, ardından boot.o HARİÇ diğer tüm nesne dosyalarını listeliyoruz!
+ld -m elf_i386 -T linker.ld -o kernel.bin boot.o $(ls *.o | grep -v boot.o) --no-warn-rwx-segments
 
 echo "[4] Boot edilebilir ISO imajı paketleniyor..."
 # GRUB standartlarına uygun klasör yapısını kökten tertemiz inşa ediyoruz
