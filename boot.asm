@@ -1,34 +1,23 @@
-; =======================================================
-; Wind OS / Sky-OS Hibrit Çekirdek Giriş Noktası (Saf Metin Girişi)
-; =======================================================
+; boot.asm - Wind OS / Sky Core OS Bootloader Giriş Noktası
 MBOOT_PAGE_ALIGN    equ 1 << 0
 MBOOT_MEM_INFO      equ 1 << 1
-MBOOT_MAGIC         equ 0x1BADB002
-MBOOT_FLAGS         equ MBOOT_PAGE_ALIGN | MBOOT_MEM_INFO
-MBOOT_CHECKSUM      equ -(MBOOT_MAGIC + MBOOT_FLAGS)
+MBOOT_HEADER_MAGIC  equ 0x1BADB002
+MBOOT_HEADER_FLAGS  equ MBOOT_PAGE_ALIGN | MBOOT_MEM_INFO
+MBOOT_CHECKSUM      equ -(MBOOT_HEADER_MAGIC + MBOOT_HEADER_FLAGS)
 
 section .multiboot
 align 4
-    dd MBOOT_MAGIC
-    dd MBOOT_FLAGS
+    dd MBOOT_HEADER_MAGIC
+    dd MBOOT_HEADER_FLAGS
     dd MBOOT_CHECKSUM
 
 section .text
 global _start
-extern kernel_main
-
 _start:
-    mov esp, stack_space + 4096  ; 4KB Güvenli Yığın Alanı
-    push eax                     ; Multiboot Sihirli Numarası
-    push ebx                     ; Multiboot Bilgi Yapısı Adresi
+    ; Kernel ana fonksiyonuna atlamadan önceki stack kurulumu
+    extern kernel_main
     call kernel_main
-    
-.halt:
     cli
+.hang:
     hlt
-    jmp .halt
-
-section .bss
-align 16
-stack_space:
-    resb 4096
+    jmp .hang
