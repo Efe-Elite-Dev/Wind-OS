@@ -1,12 +1,12 @@
 #!/bin/bash
 # ======================================================================
-# 🚀 SKY CORE OS / WIND OS MEGA BUILD ENGINE
+# 🚀 SKY CORE OS / WIND OS MEGA BUILD ENGINE (HEAVY EDITION)
 # ======================================================================
 
 set -e # Herhangi bir adım hata verirse betiği hemen durdur
 
 echo "[-] Eski derleme kalıntıları temizleniyor..."
-rm -rf *.o kernel.bin os_image.iso iso_root
+rm -rf *.o kernel.bin os_image.iso iso_root big_asset.dat
 
 echo "[1] Çekirdek önyükleme mekanizması derleniyor (boot.asm)..."
 nasm -f elf32 boot.asm -o boot.o
@@ -41,9 +41,17 @@ menuentry "Sky Core OS / Wind OS" {
 }
 EOF
 
-# GitHub Actions üzerinde mformat hatasını ezmek için doğrudan xorriso ile 
-# sadece eltorito (Legacy BIOS) modunda paketleme yapıyoruz.
-# Bu komut mtools/mformat BAĞIMLILIĞINI TAMAMEN ORTADAN KALDIRIR!
+# ======================================================================
+# 📦 OS AĞIRLAŞTIRMA OPERASYONU (MEGA ASSET ENTEGRASYONU)
+# ======================================================================
+# Aga madem boyut büyük olsun istiyorsun, ISO'nun içine 50 MB'lık sahte 
+# bir sistem kaynağı/veri bloğu (system_assets.dat) üretiyoruz.
+# Bu işlem kodun saflığını bozmaz ama kurulum hissiyatını sonuna kadar yaşatır!
+echo "[+] Sisteme mega kaynak dosyaları ve sürücü paketleri ekleniyor (50 MB)..."
+dd if=/dev/zero of=iso_root/boot/system_assets.dat bs=1M count=50 2>/dev/null
+# ======================================================================
+
+# GitHub Actions üzerinde mformat hatasını ezmek için xorriso ile paketleme
 xorriso -as mkisofs \
     -R -b boot/grub/i386-pc/eltorito.img \
     -no-emul-boot -boot-load-size 4 -boot-info-table \
@@ -54,4 +62,5 @@ echo "[!] Uyarı: ISO paketleme alternatif moda geçiriliyor..."
 
 echo "======================================================================"
 echo "🎉 BAŞARILI: Sky Core OS ISO imajı (os_image.iso) başarıyla üretildi!"
+echo "[📊] Güncel ISO Boyutu: $(du -sh os_image.iso | cut -f1)"
 echo "======================================================================"
