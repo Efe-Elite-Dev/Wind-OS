@@ -1,20 +1,17 @@
 #!/bin/bash
-set -e 
+set -e # Herhangi bir adım hata verirse derlemeyi durdur
 
 echo "======================================================================"
-echo "🚀 SKY CORE OS / WIND OS - SAF VE BAĞIMSIZ ULTRA DERLEME MOTORU"
+echo "🚀 SKY CORE OS / WIND OS MEGA BUILD ENGINE"
 echo "======================================================================"
 
-# 1. Eski Kalıntıları Temizle
-echo "[-] Eski nesne dosyaları imha ediliyor..."
-rm -rf *.o kernel.bin os_image.iso iso_root
+echo "[-] Eski derleme kalıntıları temizleniyor..."
+rm -rf *.o kernel.bin os_image.iso iso_root/boot/kernel.bin
 
-# 2. Assembly Önyükleyici Derlemesi
-echo "[1] boot.asm derleniyor..."
+echo "[1] Çekirdek önyükleme mekanizması derleniyor (boot.asm)..."
 nasm -f elf32 boot.asm -o boot.o
 
-# 3. Tüm C Alt Sistemlerini Tek Tek Derle
-echo "[2] Çekirdek ve tüm alt modüller derleniyor..."
+echo "[2] Çekirdek ve tüm alt sistemler derleniyor..."
 gcc -m32 -c kernel.c -o kernel.o -ffreestanding -O2 -fno-exceptions -fno-stack-protector
 gcc -m32 -c setup.c -o setup.o -ffreestanding -O2 -fno-exceptions -fno-stack-protector
 gcc -m32 -c setup_ui.c -o setup_ui.o -ffreestanding -O2 -fno-exceptions -fno-stack-protector
@@ -28,30 +25,27 @@ gcc -m32 -c exe_subsystem.c -o exe_subsystem.o -ffreestanding -O2 -fno-exception
 gcc -m32 -c ai_subsystem.c -o ai_subsystem.o -ffreestanding -O2 -fno-exceptions -fno-stack-protector
 gcc -m32 -c deb_subsystem.c -o deb_subsystem.o -ffreestanding -O2 -fno-exceptions -fno-stack-protector
 
-# 4. Linker ile Tüm Yapıyı Birleştir
-echo "[3] Nesne dosyaları tek parça kernel.bin olarak mühürleniyor..."
-ld -m elf_i386 -T linker.ld -o kernel.bin boot.o kernel.o setup.o setup_ui.o gui.o screen.o mouse.o keyboard.o idt.o wind_subsystem.o exe_subsystem.o ai_subsystem.o deb_subsystem.o
+# 🔥 YENİ EKLENEN DONANIM VE HATA KORUMA DOSYALARI
+gcc -m32 -c vga_force.c -o vga_force.o -ffreestanding -O2 -fno-exceptions -fno-stack-protector
+gcc -m32 -c kerror.c -o kerror.o -ffreestanding -O2 -fno-exceptions -fno-stack-protector
 
-# 5. Bağımsız ISO Dizin Yapısı Kurulumu
-echo "[4] ISO kök dizini inşa ediliyor..."
+echo "[3] Tüm nesne dosyaları linker.ld şablonuna göre birleştiriliyor..."
+ld -m elf_i386 -T linker.ld -o kernel.bin \
+    boot.o kernel.o setup.o setup_ui.o gui.o screen.o mouse.o keyboard.o idt.o \
+    wind_subsystem.o exe_subsystem.o ai_subsystem.o deb_subsystem.o \
+    vga_force.o kerror.o
+
+echo "[4] Boot edilebilir ISO imajı paketleniyor..."
 mkdir -p iso_root/boot/grub
 cp kernel.bin iso_root/boot/kernel.bin
+cp grub.cfg iso_root/boot/grub/grub.cfg
 
-# Saf GRUB Konfigürasyonu
-cat << EOF > iso_root/boot/grub/grub.cfg
-set timeout=0
-set default=0
-menuentry "Sky Core OS" {
-    multiboot /boot/kernel.bin
-    boot
-}
-EOF
+# Güvenli ve bağımsız xorriso paketlemesi
+xorriso -as mkisofs -R -b boot/grub/i386-pc/eltorito.img \
+    -no-emul-boot -boot-load-size 4 -boot-info-table \
+    --grub2-boot-info --graft-points \
+    -o os_image.iso \
+    /boot/grub/i386-pc/eltorito.img=/usr/lib/grub/i386-pc/boot_hybrid.img \
+    iso_root
 
-# 6. Ultra Güvenli Paketleme Motoru
-echo "[5] Xorriso ham modda ISO basıyor..."
-# Sistemde eltorito imajı arama zorunluluğunu kaldırıyoruz, bulamazsa direkt düz ISO yazar
-xorriso -as mkisofs -R -J -V "SKYCOREOS" -o os_image.iso iso_root
-
-echo "======================================================================"
-echo "✅ İŞLEM TAMAM: os_image.iso sıfırdan ve pürüzsüzce üretildi!"
-echo "======================================================================"
+echo "[+] BAŞARILI: os_image.iso hazır aga!"
