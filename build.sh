@@ -10,9 +10,11 @@ echo "======================================================================"
 echo "[+] Geçerli Konum: $(pwd)"
 echo "[+] Sistem Kaynakları Optimize Ediliyor (Büyük İmaj Desteği Aktif)..."
 
-# 1. Temizlik ve Ön Hazırlık
+# 1. Agresif Temizlik Aşaması
 echo "[-] Eski derleme kalıntıları temizleniyor..."
-rm -rf iso kernel.bin *.o windos.iso build_output.log
+# Klasörleri ve tüm .o uzantılı binary kalıntıları kökten kazıyoruz
+rm -rf iso_root iso kernel.bin windos.iso build_output.log
+rm -f *.o
 
 # 2. Assembly Çekirdeğinin Derlenmesi
 echo "[1] Çekirdek önyükleme mekanizması derleniyor (boot.asm)..."
@@ -24,17 +26,14 @@ else
     exit 1
 fi
 
-# 3. Temel C Modüllerinin Derlenmesi
+# 3. Temel C Modüllerinin Derlenmesi (Sıralama Garantili Standart Dizi)
 echo "[2] Temel Kernel ve Kurulum modülleri derleniyor..."
-declare -A CORE_MODULES=(
-    ["kernel.c"]="kernel.o"
-    ["setup.c"]="setup.o"
-    ["setup_ui.c"]="setup_ui.o"
-)
-
+# Sıralamanın bozulmaması için Associative Array yerine standart diziye çektik
+CORE_SRC_FILES=("kernel.c" "setup.c" "setup_ui.c")
 CORE_OBJS=""
-for src in "${!CORE_MODULES[@]}"; do
-    obj="${CORE_MODULES[$src]}"
+
+for src in "${CORE_SRC_FILES[@]}"; do
+    obj="${src%.c}.o"
     if [ -f "$src" ]; then
         echo "    -> Derleniyor: $src"
         gcc -m32 -c "$src" -o "$obj" -std=gnu99 -ffreestanding -O2 -Wall -Wextra
@@ -72,10 +71,10 @@ for sys in "${SUBSYSTEMS[@]}"; do
     fi
 done
 
-# 5. Bağlama (Linker) Aşaması
+# 5. Bağlama (Linker) Aşaması - MULTIBOOT DUYARLI SIRALAMA
 echo "[4] Tüm nesne dosyaları linker.ld şablonuna göre birleştiriliyor..."
 if [ -f "linker.ld" ]; then
-    # Bütün .o dosyalarını tek bir saf x86 kernel ikilisinde birleştiriyoruz
+    # ÖNEMLİ: boot.o her zaman en başta olmalı ki multiboot header en üste mühürlensin!
     ld -m elf_i386 -z noexecstack -T linker.ld -o kernel.bin boot.o $CORE_OBJS $OPTIONAL_OBJS
     echo "    -> [OK] kernel.bin başarıyla mühürlendi."
 else
@@ -83,17 +82,17 @@ else
     exit 1
 fi
 
-# 6. ISO Dağıtım Havuzunun Hazırlanması (Mega Depolama Desteği)
+# 6. ISO Dağıtım Havuzunun Hazırlanması (Klasör ismi iso_root olarak izole edildi)
 echo "[5] Canlı ISO yapısı ve GRUB önyükleme katmanı yapılandırılıyor..."
-mkdir -p iso/boot/grub
-cp kernel.bin iso/boot/kernel.bin
+mkdir -p iso_root/boot/grub
+cp kernel.bin iso_root/boot/kernel.bin
 
-# Vasiyet ettiğin 26:03 zaman damgası ve fırtınalı temayı simüle eden GRUB yapılandırması
-cat << EOF > iso/boot/grub/grub.cfg
+# Vasiyet ettiğin fırtınalı temayı simüle eden GRUB yapılandırması
+cat << EOF > iso_root/boot/grub/grub.cfg
 set timeout=3
 set default=0
 
-# Ekran kartı modu ayarları
+# Ekran kartı modu ayarları (VGA Çözünürlük Standartları)
 set gfxmode=1024x768x32
 set gfxpayload=keep
 
@@ -103,10 +102,12 @@ menuentry "Wind OS / Sky Core OS v1.5 (Vortex Kernel)" {
 }
 EOF
 
-# 7. Büyük Boyutlu Medya Paketleme Aşaması (Gerekirse >100MB / 2GB Desteği)
+# 7. Büyük Boyutlu Medya Paketleme Aşaması
 echo "[6] Önyüklenebilir medya (windos.iso) oluşturuluyor..."
-# xorriso ve mtools parametreleri büyük veri bloklarını destekleyecek şekilde esnetildi
-grub-mkrescue -o windos.iso iso -- -volid "WINDOS_15" -as mkisofs -iso-level 3
+grub-mkrescue -o windos.iso iso_root -- -volid "WINDOS_15" -as mkisofs -iso-level 3
+
+# Temizlik hamlesi: Geçici oluşturulan klasörü arkamızda iz bırakmamak için uçuruyoruz
+rm -rf iso_root
 
 if [ -f "windos.iso" ]; then
     ISO_SIZE=$(du -h windos.iso | cut -f1)
