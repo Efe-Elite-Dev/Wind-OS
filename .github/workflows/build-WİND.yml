@@ -17,8 +17,12 @@ jobs:
     - name: 🛠️ Gerekli Derleme ve Test Bağımlılıklarını Kur
       run: |
         sudo apt-get update
+        # Derleme araçları, x86_64 üzerinde 32-bit derleme kütüphaneleri ve xorriso
         sudo apt-get install -y nasm xorriso grub-pc-bin gcc-multilib build-essential
-        sudo apt-get install -y qemu-system-x86 xvfb imagemagick bc
+        # mformat hatasını çözen mtools ve matematiksel kontrol için bc paketi
+        sudo apt-get install -y mtools bc
+        # Arka planda görünmez ekran simülasyonu ve test için QEMU ile ImageMagick
+        sudo apt-get install -y qemu-system-x86 xvfb imagemagick
 
     - name: 🔑 Çalıştırma İzinlerini Ayarla
       run: chmod +x build.sh
@@ -34,9 +38,11 @@ jobs:
         sleep 2
 
         echo "[+] Sky Core OS, QEMU üzerinde boot ediliyor (Süre: 5 saniye)..."
+        # Sanal makineyi standart VGA emülasyonu ile arka planda ateşliyoruz
         qemu-system-x86_64 -cdrom os_image.iso -m 256M -vga std &
         QEMU_PID=$!
         
+        # Çekirdeğin yüklenmesi ve grafik modunun oturması için bekleme süresi
         sleep 5
 
         echo "[+] Ekranın canlı görüntüsü yakalanıyor (Screenshot)..."
@@ -46,9 +52,11 @@ jobs:
         kill $QEMU_PID || true
 
         echo "[🔍] Siyah Ekran Analiz Motoru Çalışıyor..."
+        # Resimdeki piksellerin ortalama parlaklık değerini alıyoruz (0 = Tam Siyah, 1 = Tam Beyaz)
         MEAN_COLOR=$(convert screenshot.png -colorspace Gray -format "%[fx:mean]" info:)
-        echo "[+] Ekran Parlaklık Oranı (0 = Tam Siyah, 1 = Tam Beyaz): $MEAN_COLOR"
+        echo "[+] Ekran Parlaklık Oranı: $MEAN_COLOR"
 
+        # Eşik değeri kontrolü: Eğer ekran tamamen siyahsa (0.02'den küçükse) testi patlatıyoruz
         if (( $(echo "$MEAN_COLOR < 0.02" | bc -l) )); then
           echo "======================================================================"
           echo "❌ HATA: SİYAH EKRAN ALGILANDI! Sistem grafik moduna geçemedi veya çöktü."
@@ -61,8 +69,8 @@ jobs:
         fi
 
     - name: 📦 Ekran Görüntüsünü ve ISO'yu Kaydet
-      if: always()  # Test patlasa bile screenshot.png'yi görebilmen için her zaman çalışır
-      uses: actions/upload-artifact@v4  # <--- DOĞRU REPO ADRESİYLE GÜNCELLENDİ!
+      if: always()  # Test başarısız olsa bile neyin çöktüğünü görmen için her zaman çalışır
+      uses: actions/upload-artifact@v4
       with:
         name: SkyCoreOS-Boot-Result
         path: |
