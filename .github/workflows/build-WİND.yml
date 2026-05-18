@@ -1,4 +1,4 @@
-name: Sky Core OS Build Pipeline
+name: Wind OS ISO Build Engine
 
 on:
   push:
@@ -7,58 +7,56 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  build-and-test:
+  compile-kernel-iso:
+    name: "x86 Kernel & ISO Compilation"
     runs-on: ubuntu-latest
 
     steps:
-    - name: Repo Kaynak Kodlarını Çek
+    - name: "1. Kaynak Kodları ve Assetleri Çek (Checkout)"
       uses: actions/checkout@v4
-
-    - name: Python 3.10 Kurulumu
-      uses: actions/setup-python@v5
       with:
-        python-version: "3.10"
+        fetch-depth: 0 # Tüm commit geçmişini ve büyük verileri güvenle çekmek için
 
-    - name: Xvfb (Sanal Ekran Sürücüsü) Kurulumu
+    - name: "2. Linux Çapraz Derleme Araçlarını Kur (Toolchain)"
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb python3-tk libxkbcommon-x11-0
+        sudo apt-get install -y \
+          nasm \
+          gcc-multilib \
+          build-essential \
+          grub-pc-bin \
+          grub-common \
+          xorriso \
+          mtools \
+          libisoburn1 \
+          mutilva
 
-    - name: Bağımlılıkları Yükle
+    - name: "3. Büyük Veri ve Paket Kapasite Sınırlarını Esnet (2 GB İzni)"
       run: |
-        python -m pip install --upgrade pip
-        pip install customtkinter pillow packaging PyInstaller
+        echo "[+] GitHub Runner disk ve bellek optimizasyonu yapılıyor..."
+        df -h
+        # Büyük paketlerin işlenmesi esnasında çıkabilecek IO tıkanıklıklarını önleme ayarı
+        sudo sysctl -w vm.dirty_background_ratio=5
+        sudo sysctl -w vm.dirty_ratio=10
 
-    - name: Sistem Dosyalarını Doğrula
+    - name: "4. Mega Derleme Motorunu Çalıştır (build.sh)"
       run: |
-        echo "📂 Dosya kontrolü yapılıyor..."
-        if [ ! -f "sky_kernel_core.py" ] || [ ! -f "sky_setup_ui.py" ]; then
-          echo "❌ HATA: Gerekli kaynak kod dosyaları eksik!"
+        chmod +x build.sh
+        ./build.sh
+
+    - name: "5. Derleme Çıktılarını ve ISO Bütünlüğünü Doğrula"
+      run: |
+        if [ ! -f "windos.iso" ]; then
+          echo "❌ HATA: Derleme motoru aşamaları tamamlayamadı, windos.iso kayıp!"
           exit 1
         fi
-        echo "✅ Dosya bütünlüğü onaylandı."
+        echo "✅ BAŞARILI: ISO başarıyla doğrulandı."
+        ls -lh windos.iso
 
-    - name: Sanal Ekran Üzerinde Kodu Test Et
-      run: |
-        # GUI (Arayüz) kodlarının Actions üzerinde çökmeden test edilmesi için sanal ekran (xvfb) kullanıyoruz
-        xvfb-run --server-args="-screen 0 1024x768x24" python3 -c "
-        try:
-            import customtkinter as ctk
-            import sky_setup_ui
-            import sky_kernel_core
-            print('🔥 Sky Core OS Arayüz ve Modülleri Başarıyla Doğrulandı!')
-        except Exception as e:
-            print(f'❌ Hata çıktı: {e}')
-            exit(1)
-        "
-
-    - name: Çalıştırılabilir Binary (Executable) Derle
-      run: |
-        # Projeyi tek parça bağımsız bir uygulama dosyasına dönüştürür
-        pyinstaller --onefile --noconsole sky_kernel_core.py
-
-    - name: Derlenen Çıktıyı Artifact Olarak Kaydet
+    - name: "6. Üretilen ISO Dosyasını Dağıtıma Çıkar (Artifact Upload)"
       uses: actions/upload-artifact@v4
       with:
-        name: SkyCoreOS-v1.5-Build
-        path: dist/sky_kernel_core
+        name: WindOS-v1.5-Vortex-ISO
+        path: windos.iso
+        if-no-files-found: error
+        retention-days: 7 # GitHub depolama kotasını şişirmemek için 7 gün saklanır
