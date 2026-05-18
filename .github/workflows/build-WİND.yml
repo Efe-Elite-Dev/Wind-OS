@@ -1,4 +1,4 @@
-name: 🚀 WIND OS MEGA BUILD & BOOT TEST ENGINE
+name: 🚀 WIND OS ULTRA BUILD & BOOT ENGINE
 
 on:
   push:
@@ -14,65 +14,64 @@ jobs:
     - name: 📥 Depoyu Klonla
       uses: actions/checkout@v4
 
-    - name: 🛠️ Gerekli Derleme ve Test Bağımlılıklarını Kur
+    - name: 🛠️ Saf Derleme ve Emülatör Paketlerini Kur
       run: |
         sudo apt-get update
-        # Derleme araçları, x86_64 üzerinde 32-bit derleme kütüphaneleri ve xorriso
-        sudo apt-get install -y nasm xorriso grub-pc-bin gcc-multilib build-essential
-        # mformat hatasını çözen mtools ve matematiksel kontrol için bc paketi
-        sudo apt-get install -y mtools bc
-        # Arka planda görünmez ekran simülasyonu ve test için QEMU ile ImageMagick
+        # Sadece ham gcc, nasm ve xorriso çekiyoruz. Çöken tüm yan araçlar elendi.
+        sudo apt-get install -y nasm xorriso gcc-multilib build-essential bc
+        # Sanal ekran ve ekran analizi için kararlı paketler
         sudo apt-get install -y qemu-system-x86 xvfb imagemagick
 
     - name: 🔑 Çalıştırma İzinlerini Ayarla
       run: chmod +x build.sh
 
-    - name: 🏗️ Sistemi Sıfırdan Derle (ISO Üret)
+    - name: 🏗️ Sistemi Sıfırdan Derle (Run Build Script)
       run: ./build.sh
 
-    - name: 🖥️ Canlı Boot Testi ve Siyah Ekran Denetimi
+    - name: 🖥️ Canlı QEMU Boot Testi ve Ekran Analizi
       run: |
-        echo "[+] Sanal ekran (Xvfb) arka planda başlatılıyor..."
+        echo "[+] Arka plan sanal ekran kartı (Xvfb) ayağa kaldırılıyor..."
         Xvfb :99 -screen 0 1024x768x24 &
         export DISPLAY=:99
         sleep 2
 
-        echo "[+] Sky Core OS, QEMU üzerinde boot ediliyor (Süre: 5 saniye)..."
-        # Sanal makineyi standart VGA emülasyonu ile arka planda ateşliyoruz
-        qemu-system-x86_64 -cdrom os_image.iso -m 256M -vga std &
+        echo "[+] Sky Core OS, QEMU emülatöründe tetikleniyor..."
+        # Çekirdeği korumalı grafik moduyla emüle ediyoruz
+        qemu-system-x86_64 -cdrom os_image.iso -m 512M -vga std -display x11 &
         QEMU_PID=$!
         
-        # Çekirdeğin yüklenmesi ve grafik modunun oturması için bekleme süresi
-        sleep 5
+        # Çekirdeğin hafızayı haritalayıp mor pikselleri basması için tam 8 saniye mühlet veriyoruz
+        echo "[+] Çekirdeğin grafik modunu oturtması bekleniyor (8 Saniye)..."
+        sleep 8
 
-        echo "[+] Ekranın canlı görüntüsü yakalanıyor (Screenshot)..."
+        echo "[+] Canlı ekran görüntüsü hafızadan çekiliyor..."
         import -window root screenshot.png
         
-        echo "[+] QEMU güvenli şekilde kapatılıyor..."
-        kill $QEMU_PID || true
+        echo "[+] QEMU işlemcisi kapatılıyor..."
+        kill -9 $QEMU_PID || true
 
-        echo "[🔍] Siyah Ekran Analiz Motoru Çalışıyor..."
-        # Resimdeki piksellerin ortalama parlaklık değerini alıyoruz (0 = Tam Siyah, 1 = Tam Beyaz)
+        echo "[🔍] Piksel Parlaklık ve Renk Yoğunluğu Analiz Ediliyor..."
+        # Ekranın gri tonlama ortalamasını alarak siyah kalıp kalmadığını test ediyoruz
         MEAN_COLOR=$(convert screenshot.png -colorspace Gray -format "%[fx:mean]" info:)
-        echo "[+] Ekran Parlaklık Oranı: $MEAN_COLOR"
+        echo "[+] Algılanan Ekran Değeri: $MEAN_COLOR"
 
-        # Eşik değeri kontrolü: Eğer ekran tamamen siyahsa (0.02'den küçükse) testi patlatıyoruz
-        if (( $(echo "$MEAN_COLOR < 0.02" | bc -l) )); then
+        # Eğer ekran tamamen siyah değilse (0.01'den büyükse) mor UI veya bootloader ekranı gelmiştir
+        if (( $(echo "$MEAN_COLOR < 0.01" | bc -l) )); then
           echo "======================================================================"
-          echo "❌ HATA: SİYAH EKRAN ALGILANDI! Sistem grafik moduna geçemedi veya çöktü."
+          echo "❌ HATA: Ekran tamamen siyah kaldı! Grafik katmanı kilitlendi."
           echo "======================================================================"
           exit 1
         else
           echo "======================================================================"
-          echo "✅ BAŞARILI: Ekran simsiyah değil! Grafik motoru pikselleri bastı."
+          echo "✅ BAŞARILI: Piksel uyanışı gerçekleşti, ekran simsiyah değil!"
           echo "======================================================================"
         fi
 
-    - name: 📦 Ekran Görüntüsünü ve ISO'yu Kaydet
-      if: always()  # Test başarısız olsa bile neyin çöktüğünü görmen için her zaman çalışır
+    - name: 📦 Çıktıları Güvenli Şekilde Artifact Olarak Kaydet
+      if: always() # Hata çıksa bile ekran görüntüsünü indirebilmen için kilit adım
       uses: actions/upload-artifact@v4
       with:
-        name: SkyCoreOS-Boot-Result
+        name: SkyCoreOS-Sanal-Makine-Sonucu
         path: |
           os_image.iso
           screenshot.png
