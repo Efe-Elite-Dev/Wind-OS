@@ -1,15 +1,36 @@
+// setup_ui.c - Wind OS İlk Kurulum ve Çekmece Durum Kontrolü
 #include <stdbool.h>
 
-// Dışarıdan (screen.c, gui.c veya keyboard.c'den) gelecek olan fonksiyonların prototipleri
-extern void screen_clear(void);
-extern void draw_string(const char* text, int x, int y, unsigned int color);
-extern void draw_button(const char* label, int x, int y, int width, int height);
-extern void draw_rectangle(int x, int y, int width, int height, unsigned int color);
-extern void trigger_vortex_kernel_main(void); // Ana işletim sistemi masaüstü tetikleyicisi
+/* ======================================================================
+   LINKER KÖPRÜLERİ (STUBS)
+   Eğer screen.c veya gui.c içinde bu fonksiyonlar tam bu isimle 
+   tanımlanmadıysa linkerin patlamasını engeller. Gerçek çizim modüllerin 
+   bu isimleri içerdiğinde doğrudan onlara bağlanır.
+   ======================================================================
+*/
+__attribute__((weak)) void screen_clear(void) {
+    // Geçici boş gövde - Linkeri kandırır
+}
+
+__attribute__((weak)) void draw_string(const char* text, int x, int y, unsigned int color) {
+    (void)text; (void)x; (void)y; (void)color;
+}
+
+__attribute__((weak)) void draw_button(const char* label, int x, int y, int width, int height) {
+    (void)label; (void)x; (void)y; (void)width; (void)height;
+}
+
+__attribute__((weak)) void draw_rectangle(int x, int y, int width, int height, unsigned int color) {
+    (void)x; (void)y; (void)width; (void)height; (void)color;
+}
+
+__attribute__((weak)) void trigger_vortex_kernel_main(void) {
+    // Kurulum bitince ana kernel döngüsüne zıplama köprüsü
+}
 
 // Kurulum ve Çekmece Durum Değişkenleri
 int current_setup_step = 1;
-bool is_app_drawer_open = true; // Şemadaki gibi varsayılan olarak açık geliyor
+bool is_app_drawer_open = true; // Şemadaki gibi varsayılan açık
 
 void render_setup_wizard(void) {
     // Adım 1: İlk Kurulum Ekranı - Hoş Geldiniz
