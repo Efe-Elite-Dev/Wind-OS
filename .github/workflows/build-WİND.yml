@@ -28,8 +28,7 @@ jobs:
           grub-common \
           xorriso \
           mtools \
-          libisoburn1 \
-          mutilva
+          libisoburn1
 
     - name: "3. Büyük Veri ve Paket Kapasite Sınırlarını Esnet (2 GB İzni)"
       run: |
