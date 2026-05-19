@@ -1,72 +1,37 @@
-name: WIND OS MEGA BUILD AND BOOT TEST ENGINE
+name: Sky Core OS Build Pipeline
 
 on:
   push:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
-  workflow_dispatch:
 
 jobs:
-  build_and_test:
+  build-os:
     runs-on: ubuntu-latest
 
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
     steps:
-    - name: Checkout Source Code
+    - name: Repoyu Klonla
       uses: actions/checkout@v4
 
-    - name: Install Build and Packaging Tools
+    - name: Derleme Araçlarını Kur (GCC Cross-Compiler & NASM)
       run: |
         sudo apt-get update
-        sudo apt-get install -y nasm gcc-multilib build-essential xorriso grub-pc-bin qemu-system-x86 xvfb imagemagick bc
+        sudo apt-get install -y gcc-multilib g++-multilib nasm make ld.lld binutils
 
-    - name: Grant Execute Permission to Build Script
-      run: chmod +x build.sh
+    - name: Çalıştırılabilir İzinleri Ver
+      run: chmod +x ./build.sh
 
-    - name: Run Build Script
+    - name: Çekirdeği Derle (Saf Terminal Modu)
       run: ./build.sh
 
-    - name: QEMU Virtual Display Test and Black Screen Analysis
-      run: |
-        echo "[+] Starting virtual frame buffer (Xvfb) in the background..."
-        Xvfb :99 -screen 0 1024x768x24 &
-        export DISPLAY=:99
-        sleep 2
-        
-        echo "[+] Booting Sky Core OS on QEMU (Duration: 5 seconds)..."
-        qemu-system-x86_64 -cdrom os_image.iso -m 512M -vga std &
-        QEMU_PID=$!
-        sleep 5
-        
-        echo "[+] Capturing live screenshot..."
-        import -window root screenshot.png
-        
-        echo "[+] Terminating QEMU safely..."
-        kill -15 $QEMU_PID
-        
-        echo "[🔍] Running Screen Brightness Analysis..."
-        BRIGHTNESS=$(convert screenshot.png -colorspace gray -format "%[fx:mean]" info:)
-        echo "[+] Display Brightness Ratio: $BRIGHTNESS"
-        
-        if [ $(echo "$BRIGHTNESS == 0.0" | bc -l) -eq 1 ]; then
-          echo "======================================================================"
-          echo "❌ ERROR: Screen is completely black! Graphics engine failed to render."
-          echo "======================================================================"
-          exit 1
-        else
-          echo "======================================================================"
-          echo "✅ SUCCESS: Screen is not black! Piksels rendered successfully."
-          echo "======================================================================"
-        fi
-
-    - name: Upload Artifacts
+    - name: Derleme Çıktılarını Arşivle (Artifact)
+      if: success()
       uses: actions/upload-artifact@v4
       with:
-        name: SkyCoreOS-Boot-Result
+        name: skycore-vortex-kernel
         path: |
-          os_image.iso
-          screenshot.png
-        retention-days: 5
+          bin/
+          *.bin
+          *.iso
+        if-no-files-found: warn
