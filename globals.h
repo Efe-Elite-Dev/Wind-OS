@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-/* Global Değişken Tanımları */
+// Tüm dosyaların ortak erişeceği grafik değişkenleri
 extern uint32_t* GRAPHICS_FRAMEBUFFER;
 extern int is_graphics_mode;
 
-#endif // GLOBALS_H
+#endif
