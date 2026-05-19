@@ -13,7 +13,7 @@ typedef int            bool;
 #define SCREEN_WIDTH  800
 #define SCREEN_HEIGHT 600
 
-// Sabit 0xA0000 yerine ekran kartının gerçek adresini bu işaretçide tutacağız
+// Eski 0xA0000 yerine ekran kartının gerçek fiziksel adresini tutacak küresel işaretçi
 extern uint32_t* gfx_framebuffer;
 
 typedef enum {
