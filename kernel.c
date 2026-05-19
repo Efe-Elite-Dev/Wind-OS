@@ -20,7 +20,26 @@ volatile int is_graphics_mode = 1;
 static volatile int mouse_x = SW / 2;
 static volatile int mouse_y = SH / 2;
 
-extern void force_graphics_hardware(void);
+/* ============================================================
+ * STUBS / FIXES
+ * ============================================================ */
+
+/* LINKER HATASI ÇÖZÜMÜ */
+void force_graphics_hardware(void)
+{
+    /* Şimdilik boş */
+}
+
+/* Diğer modüller isterse diye */
+int ai_hud_visible = 0;
+
+void screen_init(void) {}
+void setup_init(void) {}
+
+void setup_handle_input(uint8_t sc)
+{
+    (void)sc;
+}
 
 /* ============================================================
  * PORT IO
@@ -114,6 +133,7 @@ static void gradient_v(uint32_t top, uint32_t bot)
 static void draw_cursor(int x, int y)
 {
     for (int i = 0; i < 12; i++) {
+
         for (int j = 0; j <= i; j++) {
 
             uint32_t col =
@@ -134,13 +154,20 @@ static void render_desktop(void)
 {
     gradient_v(0xFF1A0F2E, 0xFF0D0B18);
 
+    /* Üst bar */
     draw_rect(0, 0, SW, 38, 0xAA14102A);
 
+    /* Sol panel */
     draw_rect(20, 60, 300, 120, 0xAA211C38);
     draw_rect_outline(20, 60, 300, 120, 0xFF00E5FF);
 
+    /* Alt dock */
     draw_rect(20, SH - 72, 700, 56, 0xAA211C38);
     draw_rect_outline(20, SH - 72, 700, 56, 0xFF00E5FF);
+
+    /* Basit pencere */
+    draw_rect(340, 180, 340, 220, 0xFF111122);
+    draw_rect_outline(340, 180, 340, 220, 0xFF00E5FF);
 
     draw_cursor(mouse_x, mouse_y);
 }
