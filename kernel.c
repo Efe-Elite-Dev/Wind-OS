@@ -101,11 +101,12 @@ void draw_rectangle_outline(int x, int y, int width, int height, uint32_t color)
     }
 }
 
+// HATA DÜZELTİLDİ: Parantez hatası giderildi, matematiksel akış senkronize edildi.
 void draw_vertical_gradient(uint32_t color_top, uint32_t color_bottom) {
     for (int y = 0; y < SCREEN_HEIGHT; y++) {
-        uint8_t r = ((color_top >> 16) & 0xFF) * (SCREEN_HEIGHT - y) / SCREEN_HEIGHT + ((color_bottom >> 16) & 0xFF) * y / SCREEN_HEIGHT;
-        uint8_t g = ((color_top >> 8) & 0xFF) * (SCREEN_HEIGHT - y) / SCREEN_HEIGHT + ((color_bottom >> 8) & 0xFF) * y / SCREEN_HEIGHT;
-        uint8_t b = (color_top & 0xFF) * (SCREEN_HEIGHT - y) / SCREEN_HEIGHT + ((color_bottom & 0xFF) * y / SCREEN_HEIGHT;
+        uint8_t r = (((color_top >> 16) & 0xFF) * (SCREEN_HEIGHT - y) / SCREEN_HEIGHT) + (((color_bottom >> 16) & 0xFF) * y / SCREEN_HEIGHT);
+        uint8_t g = (((color_top >> 8) & 0xFF) * (SCREEN_HEIGHT - y) / SCREEN_HEIGHT) + (((color_bottom >> 8) & 0xFF) * y / SCREEN_HEIGHT);
+        uint8_t b = ((color_top & 0xFF) * (SCREEN_HEIGHT - y) / SCREEN_HEIGHT) + ((color_bottom & 0xFF) * y / SCREEN_HEIGHT);
         uint32_t mixed_color = (0xFF << 24) | (r << 16) | (g << 8) | b;
         for (int x = 0; x < SCREEN_WIDTH; x++) {
             GRAPHICS_FRAMEBUFFER[y * SCREEN_WIDTH + x] = mixed_color;
@@ -113,7 +114,6 @@ void draw_vertical_gradient(uint32_t color_top, uint32_t color_bottom) {
     }
 }
 
-// HATA DÜZELTİLDİ: 'c' parametresi (void)c; yapılarak "unused parameter" uyarısı engellendi.
 void draw_char_basic(int x, int y, char c, uint32_t color) {
     (void)c; 
     static const uint8_t font_matrix[8] = {0x3C, 0x66, 0x66, 0x7C, 0x66, 0x66, 0x66, 0x00};
@@ -241,7 +241,6 @@ void kernel_main(void* mboot_ptr, uint32_t magic) {
 // ==============================================================================
 // 🛠️ LINKER SUSTURUCU KÖPRÜLER (STUBS)
 // ==============================================================================
-// ÇAKIŞMA ÇÖZÜLDÜ: screen_init() fonksiyonu screen.o'da zaten tanımlı olduğu için buradan kaldırıldı!
 void idt_init(void) {}
 void keyboard_init(void) {}
 void mouse_init(void) {}
