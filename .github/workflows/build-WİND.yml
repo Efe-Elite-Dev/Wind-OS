@@ -17,7 +17,7 @@ jobs:
     - name: Derleme Araçlarını Kur (GCC Cross-Compiler & NASM)
       run: |
         sudo apt-get update
-        sudo apt-get install -y gcc-multilib g++-multilib nasm make ld.lld binutils
+        sudo apt-get install -y gcc-multilib g++-multilib nasm make lld binutils
 
     - name: Çalıştırılabilir İzinleri Ver
       run: chmod +x ./build.sh
