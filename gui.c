@@ -1,8 +1,7 @@
 #include "globals.h"
 #include "gui.h"
 
-// --- YERLEŞİK 8x8 BİTMAP FONT ---
-// Temel ASCII karakterleri (32 - 127) için pikselleri belirleyen matris
+// --- YERLEŞİK 8x8 BİTMAP FONT KÜTÜPHANESİ ---
 static const uint8_t font8x8[96][8] = {
     {0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00}, // Boşluk (32)
     {0x18,0x18,0x18,0x18,0x00,0x00,0x18,0x00}, // !
@@ -64,7 +63,7 @@ static const uint8_t font8x8[96][8] = {
     {0x42,0x42,0x24,0x18,0x08,0x08,0x08,0x00}, // Y
     {0x7E,0x02,0x04,0x08,0x10,0x20,0x7E,0x00}, // Z
     {0x3C,0x20,0x20,0x20,0x20,0x20,0x3C,0x00}, // [
-    {0x00,0x40,0x20,0x10,0x08,0x04,0x02,0x00}, // \
+    {0x00,0x40,0x20,0x10,0x08,0x04,0x02,0x00}, // Ters Slash Karakteri
     {0x3C,0x02,0x02,0x02,0x02,0x02,0x3C,0x00}, // ]
     {0x08,0x14,0x22,0x00,0x00,0x00,0x00,0x00}, // ^
     {0x00,0x00,0x00,0x00,0x00,0x00,0x7E,0x00}, // _
@@ -74,8 +73,7 @@ static const uint8_t font8x8[96][8] = {
 // --- EKRAN SÜRÜCÜSÜ TEMELLERİ ---
 
 void init_vga(void) {
-    // GRUB ekranı bizim için açtığından burayı ekranı temizlemek için kullanıyoruz
-    clear_screen(0x131424); // Koyu indigo arka plan (Senin tasarımdaki modern hava)
+    clear_screen(0x131424); // Koyu Gece Mavisi Arka Plan
 }
 
 void clear_screen(uint32_t color) {
@@ -103,7 +101,6 @@ void draw_text(const char* text, int x, int y, uint32_t color) {
     int current_x = x;
     while (*text) {
         char c = *text;
-        // Türkçe karakter yumuşatmaları ve ASCII dönüştürme
         if ((uint8_t)c >= 32 && (uint8_t)c <= 127) {
             int idx = c - 32;
             for (int row = 0; row < 8; row++) {
@@ -115,7 +112,7 @@ void draw_text(const char* text, int x, int y, uint32_t color) {
                 }
             }
         }
-        current_x += 9; // Harfler arası 1 piksel boşluk
+        current_x += 9; // Karakterler arası boşluk
         text++;
     }
 }
@@ -123,128 +120,80 @@ void draw_text(const char* text, int x, int y, uint32_t color) {
 // --- PENCERE VE BUTON BİLEŞENLERİ ---
 
 void draw_window_pure(int x, int y, int w, int h, const char* title) {
-    // Arka plan kartı (Açık Gri / Beyazımsı)
-    draw_rect(x, y, w, h, 0xF0F0F2);
-    // Pencere başlık çubuğu (Koyu Şık Mavi)
-    draw_rect(x, y, w, 28, 0x232743);
-    // Başlık Metni
-    draw_text(title, x + 12, y + 8, 0xFFFFFF);
+    draw_rect(x, y, w, h, 0xF0F0F2); // Pencere gövdesi (Açık Gri)
+    draw_rect(x, y, w, 28, 0x232743); // Üst Başlık Çubuğu (Lacivert)
+    draw_text(title, x + 12, y + 8, 0xFFFFFF); // Başlık metni
 }
 
 void draw_button(const char* label, int x, int y, int w, int h, bool focused) {
-    // Odaklanmışsa daha parlak, değilse normal buton rengi
     uint32_t btn_color = focused ? 0x343A63 : 0x232743;
     draw_rect(x, y, w, h, btn_color);
-    // Buton gölgesi/sınırı
-    draw_rect(x, y + h - 2, w, 2, 0x111322);
-    // Buton metni
+    draw_rect(x, y + h - 2, w, 2, 0x111322); // Buton gölgesi
     draw_text(label, x + 15, y + (h / 2) - 4, 0xFFFFFF);
 }
 
-// --- GÖRSEL ARAYÜZ EKRANLARI (IMAGE 2 RECREATION) ---
+// --- GÖRSEL ARAYÜZ EKRANLARI ---
 
-// EKRAN 1: Hoş Geldiniz Ekranı
 void draw_setup_welcome(void) {
-    clear_screen(0x131424); // Derin arka plan
-    
-    // Merkez Kartı
+    clear_screen(0x131424); 
     draw_window_pure(150, 100, 500, 380, "ILK KURULUM EKRANI - HOS GELDINIZ");
-    
-    // Pusula Logosu Simülasyonu
     draw_rect(370, 150, 60, 60, 0x232743);
-    draw_rect(395, 155, 10, 50, 0xFF5555); // Pusula iğnesi
-    
+    draw_rect(395, 155, 10, 50, 0xFF5555); // Logo sembolü
     draw_text("ILK KURULUM EKRANI", 310, 240, 0x000000);
     draw_text("Sisteme Hos Geldiniz!", 300, 270, 0x000000);
-    
-    // Butonlar
     draw_button("Hizli Kurulum (Az)", 200, 360, 180, 40, true);
     draw_button("Detayli Kurulum (Baska)", 420, 360, 190, 40, false);
-    
-    // Sol alt köşe OS etiketi
     draw_rect(10, 550, 120, 40, 0x232743);
     draw_text("SKY CORE OS", 20, 560, 0xFFFFFF);
 }
 
-// EKRAN 2: Konum & Saat Ayarlama
 void draw_setup_location(void) {
     clear_screen(0x131424);
-    
-    // Ana Panel
     draw_window_pure(50, 50, 700, 500, "KONUM & SAAT AYARLAMA");
-    
-    // Türkiye Haritası Placeholder Alanı (Yeşilimsi Kart)
     draw_rect(400, 100, 320, 180, 0x2E5A44);
     draw_text("[ Turkiye Haritasi ]", 480, 180, 0xFFFFFF);
-    draw_rect(450, 140, 6, 6, 0xFF0000); // İstanbul pin noktası
-    
-    // Sol Taraftaki Bilgiler
+    draw_rect(450, 140, 6, 6, 0xFF0000); // İstanbul pikseli
     draw_text("SKY CORE OS v1.5'i", 80, 100, 0x000000);
     draw_text("Sectiginiz Icin Tesekkurler!", 80, 120, 0x000000);
-    
-    // Giriş Kutuları
     draw_text("Konum: [Istanbul, Turkiye]", 80, 200, 0x000000);
     draw_rect(80, 220, 280, 30, 0xFFFFFF);
-    
     draw_text("Bolge Saati: [GMT+03:00]", 80, 270, 0x000000);
     draw_rect(80, 290, 280, 30, 0xFFFFFF);
-    
-    // Kaydet Butonu
     draw_button("Konum ve Saat Ayarlarini Kaydet", 200, 420, 400, 40, true);
 }
 
-// EKRAN 3: Giriş & Tamamlama
 void draw_setup_completing(void) {
     clear_screen(0x131424);
-    
     draw_window_pure(100, 80, 600, 440, "GIRIS & TAMAMLAMA");
-    
     draw_text("Giris Bilgilerini Kontrol Edin.", 150, 140, 0x000000);
-    
-    // Ay Logosu/İkonu Simülasyonu
     draw_rect(360, 200, 80, 80, 0x1A1B2F);
-    draw_rect(390, 210, 40, 40, 0xFFFF55); // Hilal sarısı
-    
+    draw_rect(390, 210, 40, 40, 0xFFFF55); 
     draw_text("Tesekkurler, Kullanima Hazir!", 240, 320, 0x000000);
     draw_text("Masaustune Gitmek Icin HAZIR", 250, 350, 0x000000);
-    
     draw_button("BASLAT", 320, 420, 160, 45, true);
 }
 
-// EKRAN 4: Ana Masaüstü Görünümü
 void draw_main_desktop(void) {
-    // Masaüstü Arka Plan Duvar Kağıdı (Derin Mavi/Mor geçişi andıran düz zemin)
     clear_screen(0x1B203E);
-    
-    // Üst Bilgi Barı (Saat & Hava Durumu Widget Alanı)
     draw_rect(200, 20, 400, 80, 0x2A2B3D);
     draw_text("SAAT: 26:03", 220, 40, 0xFFFFFF);
     draw_text("Hava Durumu: Bulutlu 20C", 220, 65, 0xAAAAAA);
-    
-    // Masaüstü Simgeleri (Grid Yapısı)
-    // Sol Sütun Icons
     draw_rect(30, 120, 50, 50, 0x3A3F58); draw_text("Kamera", 30, 175, 0xFFFFFF);
     draw_rect(30, 220, 50, 50, 0x3A3F58); draw_text("Mesajlar", 30, 275, 0xFFFFFF);
     draw_rect(30, 320, 50, 50, 0x3A3F58); draw_text("Ayarlar", 30, 375, 0xFFFFFF);
-    
-    // Sağ Sütun Icons
     draw_rect(720, 120, 50, 50, 0x3A3F58); draw_text("Terminal", 720, 175, 0xFFFFFF);
     draw_rect(720, 220, 50, 50, 0x3A3F58); draw_text("Haritalar", 720, 275, 0xFFFFFF);
     
-    // Hoş Geldiniz Bildirim Penceresi (Popup Açılır Kutu)
     draw_window_pure(250, 220, 300, 140, "HOS GELDINIZ");
     draw_text("Sisteme Hos Geldiniz!", 280, 270, 0x000000);
-    draw_text("GHHOD GERLDIN!", 310, 295, 0xFF0000); // Tasarımdaki esprili kırmızı yazı
+    draw_text("GHHOD GERLDIN!", 310, 295, 0xFF0000); 
     draw_button("Tamam", 360, 320, 80, 25, false);
     
-    // Alt Görev Çubuğu (Taskbar)
     draw_rect(0, 550, SCREEN_WIDTH, 50, 0x111322);
     draw_text("TUSUMUNA BASINCA CEKMECE ACILSIN", 260, 570, 0x888888);
 }
 
-// AI Durum Göstergesi (HUD Modülü)
 void draw_ai_subsystem_hud(void) {
-    // Sağ üst köşeye yarı saydam kırmızımsı/sarı uyarı ekranı çakar
     draw_rect(580, 30, 200, 100, 0xAA0000);
     draw_rect(585, 35, 190, 90, 0x220000);
     draw_text("AI SUBSYSTEM ACTIVE", 600, 50, 0xFF0000);
