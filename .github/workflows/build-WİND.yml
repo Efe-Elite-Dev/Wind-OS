@@ -14,14 +14,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc-multilib grub-pc-bin xorriso mtools
 
-     - name: Clean and Compile Kernel
+      - name: Clean and Compile Kernel
         run: |
+          # Eski kalıntıları temizle
           rm -f *.o kernel.bin
-          # 1. boot.s dosyasını GCC ile derle
+          
+          # 1. boot.s dosyasını GCC Assembler ile derle
           gcc -m32 -c boot.s -o boot.o
-          # 2. Sadece C dosyalarını derle (Böylece boot.o'nun üzerine yazılmaz)
+          
+          # 2. Sadece C kaynak dosyalarını derle
           gcc -m32 -ffreestanding -O2 -Wall -Wextra -fno-pie -fno-stack-protector -c *.c
-          # 3. boot.o'yu başa koy, geri kalan tüm nesne dosyalarını çiftleme olmadan arkasına bağla
+          
+          # 3. boot.o'yu başa koy, geri kalan nesne dosyalarından boot.o'yu ayıklayarak bağla (Çift tanımlamayı önler)
           ld -m elf_i386 -T linker.ld -z noexecstack -o kernel.bin boot.o $(ls *.o | grep -v boot.o)
 
       - name: Prepare GRUB Layout and Generate ISO
