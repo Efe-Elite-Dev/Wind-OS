@@ -3,17 +3,16 @@
 
 #include <stdint.h>
 
-// Global değişkenler
-extern uint32_t* FRAMEBUFFER;
+// Global Değişken (Herkesin göreceği isim bu olacak)
+extern uint32_t* GRAPHICS_FRAMEBUFFER;
 extern int SCREEN_W;
 extern int SCREEN_H;
 
-// Fonksiyonlar
+// Grafik Fonksiyonları
 void draw_pixel(int x, int y, uint32_t color);
 void draw_rect(int x, int y, int w, int h, uint32_t color);
 void draw_rounded_rect(int x, int y, int w, int h, int radius, uint32_t color);
 void render_ui(void);
 void force_graphics_hardware(void);
-void kpanic(uint8_t error_code, const char* message);
 
 #endif
