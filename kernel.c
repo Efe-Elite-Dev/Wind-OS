@@ -1,7 +1,7 @@
 /*
  * Wind OS - kernel.c
- * Aga Edition - 3 Kurulum + Masaustu + Cekmece (Baslat) + Dosya Yoneticisi
- * Sifir Hata Garantili Bare-Metal Mimari
+ * Aga Edition - 3 Kurulum + Masaustu + Cekmece (Baslat) + Sadece Dosya Yoneticisi
+ * %100 Derleme Garantili Sabit Sürüm
  */
 
 #include "kernel.h"
@@ -24,19 +24,12 @@ static u32  SCR_W     = 1024;
 static u32  SCR_H     = 768;
 static u32  SCR_PITCH = 1024;
 
-/* =========================================================
-   OS DURUM MAKİNESİ (4 ADIM)
-   ========================================================= */
-typedef enum {
-    STATE_SETUP_1 = 0,
-    STATE_SETUP_2 = 1,
-    STATE_SETUP_3 = 2,
-    STATE_DESKTOP = 3
-} OS_State;
+/* * OS DURUM DEĞİŞKENİ 
+ * kernel.h içindeki orijinal OS_State enum yapısını ve adımlarını kullanıyoruz.
+ */
+static OS_State state = STATE_SETUP_1_NAME;
 
-static OS_State state = STATE_SETUP_1;
-
-/* UI Durumları */
+/* UI Arayüz Durumları */
 static u8 start_menu_open   = 0;
 static u8 file_manager_open = 0;
 
@@ -50,7 +43,7 @@ static u8 file_manager_open = 0;
 #define C_GRAY   0xFFE0E0E0u
 
 /* =========================================================
-   DONANIM PORT I/O
+   DONANIM PORT I/O SÜRÜCÜLERİ
    ========================================================= */
 static inline void outb(u16 port, u8 val) {
     __asm__ volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -160,7 +153,7 @@ static const u8 font8x8[96][8] = {
 };
 
 /* =========================================================
-   GRAFİK & ÇİZİM
+   GRAFİK VE ÇİZİM FONKSİYONLARI
    ========================================================= */
 void put_pixel(i32 x, i32 y, u32 color){
     if(x < 0 || x >= (i32)SCR_W || y < 0 || y >= (i32)SCR_H) return;
@@ -202,7 +195,7 @@ void draw_char(i32 x, i32 y, char c, u32 color){
         u8 row = font8x8[idx][i];
         for(i32 j = 0; j < 8; j++){
             if(row & (0x80 >> j)){
-                /* 2x2 Piksel büyüterek çiz */
+                /* Net okunması için 2x2 ölçekli çizim */
                 put_pixel(x + j * 2,     y + i * 2,     color);
                 put_pixel(x + j * 2 + 1, y + i * 2,     color);
                 put_pixel(x + j * 2,     y + i * 2 + 1, color);
@@ -215,13 +208,13 @@ void draw_char(i32 x, i32 y, char c, u32 color){
 void draw_string(i32 x, i32 y, const char* str, u32 color){
     while(*str){
         draw_char(x, y, *str, color);
-        x += 16; /* Karakter boşluğu */
+        x += 16;
         str++;
     }
 }
 
 /* =========================================================
-   MOUSE & KLAVYE SÜRÜCÜSÜ
+   MOUSE VE KLAVYE GİRDİLERİ
    ========================================================= */
 static i32 mouse_x = 512;
 static i32 mouse_y = 384;
@@ -278,9 +271,8 @@ u8 kbd_poll(void) {
 }
 
 /* =========================================================
-   UI BİLEŞENLERİ (BUTONLAR)
+   UI BİLEŞENLERİ (BUTON)
    ========================================================= */
-/* Tek tıklama (Single-Click Edge Detection) özelliği */
 i32 draw_button(i32 x, i32 y, i32 w, i32 h, const char* text, u8 is_blue, u8 click){
     i32 hover = (mouse_x >= x && mouse_x <= x + w && mouse_y >= y && mouse_y <= y + h);
     u32 bg = is_blue ? C_BLUE : C_GRAY;
@@ -290,7 +282,6 @@ i32 draw_button(i32 x, i32 y, i32 w, i32 h, const char* text, u8 is_blue, u8 cli
     
     fill_rrect(x, y, w, h, 4, bg);
     
-    /* Metni basitçe ortala */
     i32 text_w = 0;
     const char* t = text;
     while(*t++) text_w += 16;
@@ -300,7 +291,7 @@ i32 draw_button(i32 x, i32 y, i32 w, i32 h, const char* text, u8 is_blue, u8 cli
 }
 
 /* =========================================================
-   KURULUM EKRANLARI
+   KURULUM EKRANLARI RENDER MOTORU
    ========================================================= */
 static char username[32] = "Efe";
 static i32  user_len = 3;
@@ -310,31 +301,30 @@ void draw_setup_bg(const char* title, i32 step) {
     fill_rect(0, 0, 80, (i32)SCR_H, C_BLUE);
     draw_string(120, 60, title, C_BLACK);
     
-    /* Adım barı */
+    /* Adım İlerleme Çubuğu */
     fill_rrect(120, 100, 200, 6, 3, 0xFFDDDDDDu);
     fill_rrect(120, 100, (200 * step) / 3, 6, 3, C_BLUE);
 }
 
 void screen_setup_1(u8 key, u8 click) {
-    draw_setup_bg("Aşama 1: Kullanici Adi", 1);
+    draw_setup_bg("Asama 1: Kullanici Adi", 1);
     draw_string(120, 150, "Cihaziniza bir isim verin:", C_DARK);
     
     fill_rrect(120, 190, 400, 40, 4, C_WHITE);
     
-    /* Klavye ile isim yazma */
+    /* Klavye karakter girdisi */
     if(key >= 32 && key <= 126 && user_len < 30){
         username[user_len++] = key;
         username[user_len] = '\0';
-    } else if(key == 0x0E && user_len > 0){
+    } else if(key == 0x0E && user_len > 0){ /* Backspace */
         username[--user_len] = '\0';
     }
     
     draw_string(130, 202, username, C_BLACK);
-    /* Yanıp sönen imleç taklidi */
     fill_rect(130 + user_len * 16, 200, 2, 20, C_BLUE);
     
     if(draw_button(420, 280, 100, 40, "Ileri", 1, click)) {
-        state = STATE_SETUP_2;
+        state = STATE_SETUP_2_REGION;
     }
 }
 
@@ -348,7 +338,7 @@ void screen_setup_2(u8 click) {
     draw_string(140, 250, "Almanya - Almanca", C_DARK);
     
     if(draw_button(420, 340, 100, 40, "Ileri", 1, click)) {
-        state = STATE_SETUP_3;
+        state = STATE_SETUP_3_KEYBOARD;
     }
 }
 
@@ -365,22 +355,22 @@ void screen_setup_3(u8 click) {
 }
 
 /* =========================================================
-   MASAÜSTÜ & DOSYA YÖNETİCİSİ
+   4. EKRAN: MASAÜSTÜ & ÇEKMECE & DOSYA YÖNETİCİSİ
    ========================================================= */
 void screen_desktop(u8 click) {
-    /* MASAUSTU ARKAPLANI (Ondalık sayılarla renk gradyanı - ERRORSUZ!) */
+    /* Arkaplan Gradyanı (Derleyici hatası vermemesi için tamamen ondalık sayılarla) */
     for(i32 y = 0; y < (i32)SCR_H; y++) {
         u32 g = 103 + (y * 50) / (i32)SCR_H;
         u32 b = 192 + (y * 50) / (i32)SCR_H;
         fill_rect(0, y, (i32)SCR_W, 1, 0xFF000000u | (g << 8) | b);
     }
     
-    /* GÖREV ÇUBUĞU (Taskbar) */
+    /* Görev Çubuğu (Taskbar) */
     i32 tb_h = 45;
     i32 tb_y = (i32)SCR_H - tb_h;
     fill_rect(0, tb_y, (i32)SCR_W, tb_h, 0xFF101010u);
     
-    /* BAŞLAT BUTONU (WindOS Logosu) */
+    /* Windows / WindOS Logolu Başlat Butonu */
     i32 btn_hover = (mouse_x >= 0 && mouse_x <= 100 && mouse_y >= tb_y);
     u32 btn_color = btn_hover ? 0xFF0078D7u : C_BLUE;
     fill_rect(0, tb_y, 100, tb_h, btn_color);
@@ -390,7 +380,7 @@ void screen_desktop(u8 click) {
         start_menu_open = !start_menu_open;
     }
     
-    /* BAŞLAT MENÜSÜ ÇEKMECESİ */
+    /* BAŞLAT ÇEKMECESİ (MENÜSÜ) */
     if(start_menu_open) {
         i32 menu_w = 220;
         i32 menu_h = 200;
@@ -398,12 +388,12 @@ void screen_desktop(u8 click) {
         i32 menu_y = tb_y - menu_h;
         
         fill_rrect(menu_x, menu_y, menu_w, menu_h, 0, 0xFFEBEBEBu);
-        fill_rect(menu_x, menu_y, 4, menu_h, C_BLUE); /* Sol mavi şerit */
+        fill_rect(menu_x, menu_y, 4, menu_h, C_BLUE);
         
         draw_string(15, menu_y + 15, username, C_BLACK);
         fill_rect(10, menu_y + 40, menu_w - 20, 1, 0xFFCCCCCCu);
         
-        /* Dosya Yöneticisi Menü Öğesi */
+        /* Çekmece İçindeki Tek Eleman: Dosya Yöneticisi */
         i32 item_hover = (mouse_x >= 10 && mouse_x <= menu_w - 10 && mouse_y >= menu_y + 50 && mouse_y <= menu_y + 90);
         u32 item_bg = item_hover ? 0xFFCCCCCCu : 0xFFEBEBEBu;
         fill_rrect(10, menu_y + 50, menu_w - 20, 40, 4, item_bg);
@@ -411,7 +401,7 @@ void screen_desktop(u8 click) {
         
         if(item_hover && click) {
             file_manager_open = 1;
-            start_menu_open = 0; /* Tıklayınca menüyü kapat */
+            start_menu_open = 0; /* Pencere açılınca çekmeceyi kapat */
         }
     }
     
@@ -419,15 +409,14 @@ void screen_desktop(u8 click) {
     if(file_manager_open) {
         i32 wx = 150, wy = 100, ww = 600, wh = 400;
         
-        /* Pencere Gövdesi */
         fill_rrect(wx, wy, ww, wh, 6, C_WHITE);
         
-        /* Başlık Çubuğu */
+        /* Üst Başlık Çubuğu */
         fill_rrect(wx, wy, ww, 35, 6, C_BLUE);
-        fill_rect(wx, wy + 15, ww, 20, C_BLUE); /* Alt kavisleri düzelt */
+        fill_rect(wx, wy + 15, ww, 20, C_BLUE);
         draw_string(wx + 15, wy + 10, "Dosya Yoneticisi", C_WHITE);
         
-        /* Kapat Butonu (X) */
+        /* Kapatma Butonu (X) */
         i32 close_hover = (mouse_x >= wx + ww - 40 && mouse_x <= wx + ww - 5 && mouse_y >= wy + 5 && mouse_y <= wy + 30);
         u32 close_bg = close_hover ? 0xFFE81123u : C_BLUE;
         fill_rect(wx + ww - 40, wy + 5, 35, 25, close_bg);
@@ -437,7 +426,7 @@ void screen_desktop(u8 click) {
             file_manager_open = 0;
         }
         
-        /* Pencere İçeriği (Dosya Listesi) */
+        /* Pencere İçi Dosya Detayları */
         draw_string(wx + 20, wy + 60, "Konum: C:\\Ana_Dizin", C_DARK);
         fill_rect(wx + 15, wy + 85, ww - 30, 1, 0xFFEEEEEEu);
         
@@ -449,7 +438,7 @@ void screen_desktop(u8 click) {
 }
 
 /* =========================================================
-   MOUSE CURSOR
+   MOUSE GÖRSELİ ÇİZİCİ
    ========================================================= */
 void draw_mouse(void){
     i32 mx = mouse_x;
@@ -465,17 +454,17 @@ void draw_mouse(void){
 }
 
 /* =========================================================
-   KERNEL_MAIN (ANA GİRİŞ DÖNGÜSÜ)
+   KERNEL_MAIN (SİSTEM ANA GİRİŞ NOKTASI)
    ========================================================= */
 void kernel_main(multiboot_info_t* mbi){
-    /* Framebuffer Ayarları */
+    /* GRUB Framebuffer Bağlantısı */
     if(mbi && mbi->framebuffer_addr) {
         FB        = (u32*)(unsigned long)mbi->framebuffer_addr;
         SCR_W     = mbi->framebuffer_width;
         SCR_H     = mbi->framebuffer_height;
         SCR_PITCH = mbi->framebuffer_pitch / 4;
     } else {
-        FB        = (u32*)0xFD000000u; /* Acil durum Fallback */
+        FB        = (u32*)0xFD000000u;
         SCR_W     = 1024;
         SCR_H     = 768;
         SCR_PITCH = 1024;
@@ -487,17 +476,17 @@ void kernel_main(multiboot_info_t* mbi){
         mouse_poll();
         u8 key = kbd_poll();
         
-        /* Tıklama kenarı algılama (Sadece basıldığında 1 kez tetikler) */
+        /* Çift tıklama veya takılmayı önleyen tek tetikleme sensörü */
         u8 click = (mouse_btn & 1) && !(prev_mouse_btn & 1);
 
-        /* Duruma Göre Render */
-        if (state == STATE_SETUP_1) {
+        /* kernel.h içindeki durumlara göre ekran dallanması */
+        if (state == STATE_SETUP_1_NAME) {
             screen_setup_1(key, click);
         } 
-        else if (state == STATE_SETUP_2) {
+        else if (state == STATE_SETUP_2_REGION) {
             screen_setup_2(click);
         } 
-        else if (state == STATE_SETUP_3) {
+        else if (state == STATE_SETUP_3_KEYBOARD) {
             screen_setup_3(click);
         } 
         else if (state == STATE_DESKTOP) {
@@ -506,7 +495,7 @@ void kernel_main(multiboot_info_t* mbi){
 
         draw_mouse();
 
-        /* Basit Gecikme (İşlemciyi yormamak için) */
+        /* CPU Dalgalanma Önleyici Gecikme */
         for(volatile int delay=0; delay<15000; delay++) {
             __asm__ volatile("nop");
         }
