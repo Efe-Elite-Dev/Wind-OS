@@ -1,57 +1,71 @@
-#ifndef KERNEL_H
-#define KERNEL_H
+#include "kernel.h"
 
-/* Eğer projenizde multiboot.h varsa dahil edin, yoksa struct tanımını buraya ekleyin */
-#include "multiboot.h" 
+/* Global ve Statik Değişken Tanımlamaları */
+static u32* FB        = (u32*)0;
+static u32  SCR_W     = 1024;
+static u32  SCR_H     = 768;
+static u32  SCR_PITCH = 1024;
 
-/* Temel Tip Tanımlamaları */
-typedef unsigned int      u32;
-typedef unsigned short    u16;
-typedef unsigned char     u8;
-typedef int               i32;
-typedef signed char       i8;
+static OS_State state = STATE_SETUP_1_NAME;
 
-#define NULL ((void*)0)
+static u8 start_menu_open   = 0;
+static u8 file_manager_open = 0;
 
-/* OS Durum Makinesi Enum Tanımı (state değişkeninden önce olmak zorunda) */
-typedef enum {
-    STATE_SETUP_1_NAME,
-    STATE_SETUP_2_REGION,
-    STATE_SETUP_3_KEYBOARD,
-    STATE_SETUP_4_NETWORK,
-    STATE_SETUP_5_PRIVACY,
-    STATE_SETUP_6_CUSTOMIZE,
-    STATE_SETUP_7_WELCOME,
-    STATE_DESKTOP
-} OS_State;
+static i32 mouse_x = 512;
+static i32 mouse_y = 384;
+static u8  mouse_btn = 0;
+static u8  prev_mouse_btn = 0;
 
-/* Renk Makroları */
-#define C_BG          0xFFF3F3F5u
-#define C_WHITE       0xFFFFFFFFu
-#define C_BLACK       0xFF000000u
-#define C_BLUE        0xFF0078D4u
-// ... diğer tüm #define renk tanımlarınız ...
+static char username[32] = "Efe";
+static i32  user_len = 3;
 
-/* Fonksiyon Prototipleri (Sadece bildirim, süslü parantez ve gövde YOK) */
-void put_pixel(i32 x, i32 y, u32 color);
-void fill_rect(i32 x, i32 y, i32 w, i32 h, u32 color);
-void fill_rrect(i32 x, i32 y, i32 w, i32 h, i32 r, u32 color);
-void draw_char(i32 x, i32 y, char c, u32 color);
-void draw_string(i32 x, i32 y, const char* str, u32 color);
-void mouse_init(void);
-void mouse_poll(void);
-u8 kbd_poll(void);
-i32 draw_button(i32 x, i32 y, i32 w, i32 h, const char* text, u8 is_blue, u8 click);
-void draw_setup_bg(const char* title, i32 step);
-void screen_setup_1(u8 key, u8 click);
-void screen_setup_2(u8 click);
-void screen_setup_3(u8 click);
-void screen_setup_4(u8 click);
-void screen_setup_5(u8 click);
-void screen_setup_6(u8 click);
-void screen_setup_7(u8 click);
-void screen_desktop(u8 click);
-void draw_mouse(void);
-void kernel_main(multiboot_info_t* mbi);
+/* Font Tanımı */
+static const u8 font8x8[128][8] = {
+    // ... font hex verileriniz ...
+};
 
-#endif /* KERNEL_H */
+/* Port G/Ç Makroları veya Inline Fonksiyonlar */
+static inline u8  inb(u16 p)       { u8  v; __asm__ volatile("inb %1,%0":"=a"(v):"Nd"(p)); return v; }
+static inline void outb(u16 p,u8 v){ __asm__ volatile("outb %0,%1"::"a"(v),"Nd"(p)); }
+static inline u32 inl(u16 p)       { u32 v; __asm__ volatile("inl %1,%0":"=a"(v):"Nd"(p)); return v; }
+static inline void outl(u16 p,u32 v){ __asm__ volatile("outl %0,%1"::"a"(v),"Nd"(p)); }
+
+/* Fonksiyonların Gerçek Gövdeleri */
+void put_pixel(i32 x, i32 y, u32 color){
+    // piksel çizme kodları...
+}
+
+void fill_rect(i32 x, i32 y, i32 w, i32 h, u32 color){
+    // dikdörtgen doldurma kodları...
+}
+
+/* ... Diğer tüm fonksiyonların (screen_setup_1, mouse_poll vb.) gövdeleri ... */
+
+/* Ana Giriş Noktası */
+void kernel_main(multiboot_info_t* mbi){
+    FB        = (u32*)(unsigned long)mbi->framebuffer_addr;
+    SCR_W     = mbi->framebuffer_width;
+    SCR_H     = mbi->framebuffer_height;
+    SCR_PITCH = mbi->framebuffer_pitch / 4;
+
+    if(!FB || SCR_W==0){
+        FB       = (u32*)0xFD000000u;
+        SCR_W    = 1024;
+        SCR_H    = 768;
+        SCR_PITCH= 1024;
+    }
+
+    mouse_init();
+    pci_scan();
+
+    while(1){
+        mouse_poll();
+        u8 key = kbd_poll();
+
+        switch(state){
+          case STATE_SETUP_1_NAME:      screen1(key);  break;
+          case STATE_SETUP_2_REGION:    screen2();     break;
+          // ... diğer case durumları ...
+        }
+    }
+}
