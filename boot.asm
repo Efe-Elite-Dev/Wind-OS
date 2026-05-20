@@ -1,36 +1,53 @@
+; =========================================================
+; Wind OS / Sky-Core-OS  -  boot.asm
+; Multiboot 1 + VBE Linear Framebuffer (1024x768x32)
+;
+; HATA DÜZELTMESİ:
+;   Eski header'da bit2 (video) için gereken 5 adres alanı
+;   (header_addr, load_addr, load_end, bss_end, entry_addr)
+;   EKSİKTİ. GRUB "unsupported graphical mode" hatasını
+;   bu yüzden veriyordu. Aşağıda doğru tam yapı var.
+; =========================================================
+
+MBOOT_MAGIC    equ 0x1BADB002
+MBOOT_FLAGS    equ 0x00000007   ; bit0=hizala  bit1=bellek  bit2=video
+MBOOT_CHECKSUM equ -(MBOOT_MAGIC + MBOOT_FLAGS)
+
 section .multiboot
 align 4
-    MAGIC    equ 0x1BADB002
-    FLAGS    equ 0x00000007 ; Bit 0 (Hizala) + Bit 1 (Bellek Bilgisi) + Bit 2 (Grafik Modu İsteği)
-    CHECKSUM equ -(MAGIC + FLAGS)
-
-    dd MAGIC
-    dd FLAGS
-    dd CHECKSUM
-    
-    ; Multiboot Grafik Alanı (Görseldeki arayüz için VBE Grafik Modu)
-    dd 0          ; mode_type (0 = Lineer Grafik Modu)
-    dd 1024       ; Genişlik (Width)
-    dd 768        ; Yükseklik (Height)
-    dd 32         ; Renk Derinliği (BPP - Bits Per Pixel)
+    dd MBOOT_MAGIC
+    dd MBOOT_FLAGS
+    dd MBOOT_CHECKSUM
+    ; ---- Adres alanları: bit16=0 olduğunda 0 yazılır ----
+    ; Ama bit2 (video) için GRUB bu 5 dword'ü yine de okur!
+    dd 0        ; header_addr   (kullanılmıyor)
+    dd 0        ; load_addr     (kullanılmıyor)
+    dd 0        ; load_end_addr (kullanılmıyor)
+    dd 0        ; bss_end_addr  (kullanılmıyor)
+    dd 0        ; entry_addr    (kullanılmıyor)
+    ; ---- Video modu isteği ----
+    dd 0        ; mode_type  0 = linear grafik
+    dd 1024     ; genişlik
+    dd 768      ; yükseklik
+    dd 32       ; bit/piksel
 
 section .bss
 align 16
 stack_bottom:
-    resb 16384    ; 16 KB Kernel Yığın Alanı
+    resb 16384      ; 16 KB kernel stack
 stack_top:
 
 section .text
 global _start
-extern kernel_main
+extern kernel_main  ; kernel.c'deki void kernel_main(multiboot_info_t*)
 
 _start:
-    cli                ; Donanım kesmelerini kapat
-    mov esp, stack_top ; Stack pointer'ı ayarla
+    cli                 ; kesmeler kapalı
+    mov  esp, stack_top ; stack kur
+    push ebx            ; multiboot_info_t* → kernel_main'e parametre
+    call kernel_main
 
-    push ebx           ; Multiboot bilgi yapısının adresini stack'e at (Claude'un ekran adresini bulması için)
-    call kernel_main   ; Claude'un yazacağı kernel_main(multiboot_info_t* mbi) fonksiyonunu çağır
-
-.hang:
+.halt:
+    cli
     hlt
-    jmp .hang
+    jmp .halt
