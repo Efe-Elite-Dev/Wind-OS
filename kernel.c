@@ -1,10 +1,10 @@
 /*
- * Wind OS  -  kernel.c  v11 (ULTIMATE AI & INSTALLER EDITION)
- * 1. Ters/Çarpık Ekran Hatası Kesin Çözüldü (Pitch Mapping Fix)
- * 2. .exe, .deb, .wind Kurulum Sihirbazı Eklendi.
- * 3. Gerçek Zamanlı Yapay Zeka (Gemini) Uygulaması Eklendi + Klavye Aktif.
- * 4. Hava Durumu Widget'ı Sürüklenebilir (Özgür) Hale Getirildi.
- * 5. USB Bildirim Logosu Eklendi.
+ * Wind OS  -  kernel.c  v11.1 (ULTIMATE AI & INSTALLER EDITION - BUILD FIX)
+ * 1. thick_line fonksiyonu eklendi (Linker hatası çözüldü).
+ * 2. -Wmisleading-indentation uyarıları temizlendi.
+ * 3. Kullanılmayan mcpy ve kopya mouse_poll blokları temizlendi.
+ * 4. Pitch Mapping hatası tamamen düzeltildi (Ters/Çarpık Ekran Yok).
+ * 5. Gemini AI, Kurulum Sihirbazı, Özgür Widget, USB Algılama aktif.
  *
  * gcc -m32 -ffreestanding -fno-builtin -fno-stack-protector -O3 -w -c kernel.c -o kernel.o
  */
@@ -47,7 +47,6 @@ static inline u8   inb (u16 p)       {u8  v;__asm__ volatile("inb  %1,%0":"=a"(v
 static inline void outb(u16 p, u8 v) {__asm__ volatile("outb %0,%1"::"a"(v),"Nd"(p));}
 static inline u32  inl (u16 p)       {u32 v;__asm__ volatile("inl  %1,%0":"=a"(v):"Nd"(p));return v;}
 static inline void outl(u16 p, u32 v){__asm__ volatile("outl %0,%1"::"a"(v),"Nd"(p));}
-static void *mcpy(void *d,const void *s,u32 n){ u8*dp=(u8*)d;const u8*sp=(const u8*)s;while(n--)*dp++=*sp++;return d; }
 static u32 klen(const char *s){u32 n=0;while(s[n])n++;return n;}
 static void kcpy(char *d,const char *s){while(*s)*d++=*s++;*d=0;}
 
@@ -90,10 +89,9 @@ static u32 blend(u32 fg, u32 bg, u8 alpha) {
     return (rb & 0xFF00FF) | (g & 0x00FF00);
 }
 
-/* Çizimler artık SP ile değil, SW (Ekran Genişliği) ile yapılıyor (Ters dönme hatası çözümü) */
 static inline void alpha_pp(i32 x, i32 y, u32 c, u8 alpha){
     if((u32)x<SW && (u32)y<SH) {
-        u32 idx = (u32)y * SW + (u32)x; /* SP DEĞİL, SW KULLANILMALI */
+        u32 idx = (u32)y * SW + (u32)x; 
         u32 bg = back_buffer[idx];
         back_buffer[idx] = blend(c, bg, alpha);
     }
@@ -101,15 +99,40 @@ static inline void alpha_pp(i32 x, i32 y, u32 c, u8 alpha){
 
 static void alpha_fr(i32 x, i32 y, i32 w, i32 h, u32 c, u8 alpha){
     i32 x1=x<0?0:x, y1=y<0?0:y, x2=x+w>(i32)SW?(i32)SW:x+w, y2=y+h>(i32)SH?(i32)SH:y+h;
-    for(i32 j=y1; j<y2; j++) for(i32 i=x1; i<x2; i++) alpha_pp(i, j, c, alpha);
+    for(i32 j=y1; j<y2; j++) {
+        for(i32 i=x1; i<x2; i++) {
+            alpha_pp(i, j, c, alpha);
+        }
+    }
 }
 
 static void alpha_circ(i32 cx, i32 cy, i32 r, u32 c, u8 alpha){
-    for(i32 dy=-r; dy<=r; dy++) for(i32 dx=-r; dx<=r; dx++) if(dx*dx+dy*dy <= r*r) alpha_pp(cx+dx, cy+dy, c, alpha);
+    for(i32 dy=-r; dy<=r; dy++) {
+        for(i32 dx=-r; dx<=r; dx++) {
+            if(dx*dx+dy*dy <= r*r) alpha_pp(cx+dx, cy+dy, c, alpha);
+        }
+    }
+}
+
+/* Kalın Çizgi Çizici */
+static void thick_line(i32 x0, i32 y0, i32 x1, i32 y1, i32 thickness, u32 c, u8 alpha) {
+    i32 dx = (x1>x0?x1-x0:x0-x1);
+    i32 dy = -(y1>y0?y1-y0:y0-y1);
+    i32 sx = x0<x1?1:-1;
+    i32 sy = y0<y1?1:-1;
+    i32 err = dx+dy, e2;
+    while(1) {
+        alpha_circ(x0, y0, thickness/2, c, alpha);
+        if(x0==x1 && y0==y1) break;
+        e2 = 2*err; 
+        if(e2 >= dy){ err += dy; x0 += sx; } 
+        if(e2 <= dx){ err += dx; y0 += sy; }
+    }
 }
 
 static void glass_rr(i32 x, i32 y, i32 w, i32 h, i32 r, u32 c, u8 alpha) {
-    if(r>w/2) r=w/2; if(r>h/2) r=h/2;
+    if(r>w/2) { r=w/2; } 
+    if(r>h/2) { r=h/2; }
     alpha_fr(x+r, y, w-2*r, h, c, alpha); 
     alpha_fr(x, y+r, r, h-2*r, c, alpha); 
     alpha_fr(x+w-r, y+r, r, h-2*r, c, alpha);
@@ -117,7 +140,7 @@ static void glass_rr(i32 x, i32 y, i32 w, i32 h, i32 r, u32 c, u8 alpha) {
     alpha_circ(x+w-r-1, y+r, r, c, alpha); 
     alpha_circ(x+r, y+h-r-1, r, c, alpha); 
     alpha_circ(x+w-r-1, y+h-r-1, r, c, alpha);
-    alpha_fr(x+r, y, w-2*r, 1, CW, 50); /* Parlama */
+    alpha_fr(x+r, y, w-2*r, 1, CW, 50); 
 }
 
 static void blob_icon(i32 cx, i32 cy, u32 c) {
@@ -130,15 +153,28 @@ static void blob_icon(i32 cx, i32 cy, u32 c) {
 }
 
 static void dc(i32 x,i32 y,char ch,u32 fg,i32 sc){
-    if((u8)ch>=128) ch='?'; const u8 *g=F8[(u8)ch];
-    for(i32 row=0;row<8;row++) for(i32 col=0;col<8;col++) 
-        if(g[row]&(1<<(7-col))) alpha_fr(x+col*sc,y+row*sc,sc,sc,fg,255);
+    if((u8)ch>=128) { ch='?'; } 
+    const u8 *g=F8[(u8)ch];
+    for(i32 row=0;row<8;row++) {
+        for(i32 col=0;col<8;col++) {
+            if(g[row]&(1<<(7-col))) {
+                alpha_fr(x+col*sc,y+row*sc,sc,sc,fg,255);
+            }
+        }
+    }
 }
 static void ds(i32 x,i32 y,const char*s,u32 fg,i32 sc){
-    i32 cx=x; while(*s){ if(*s=='\n'){cx=x;y+=8*sc;} else{dc(cx,y,*s,fg,sc);cx+=8*sc;} s++; }
+    i32 cx=x; 
+    while(*s){ 
+        if(*s=='\n'){ cx=x; y+=8*sc; } 
+        else { dc(cx,y,*s,fg,sc); cx+=8*sc; } 
+        s++; 
+    }
 }
 static void dsc(i32 x,i32 y,i32 w,const char*s,u32 fg,i32 sc){
-    i32 tw=(i32)klen(s)*8*sc; if(tw<w) ds(x+(w-tw)/2,y,s,fg,sc); else ds(x,y,s,fg,sc);
+    i32 tw=(i32)klen(s)*8*sc; 
+    if(tw<w) { ds(x+(w-tw)/2,y,s,fg,sc); } 
+    else { ds(x,y,s,fg,sc); }
 }
 
 /* HARİKA DÜZELTME: Framebuffer'a aktarırken Ekran Pitch'i (SP) ile Buffer (SW) doğru eşlendi! */
@@ -156,17 +192,21 @@ static void swap_buffers(void) {
 static i32 MX=512,MY=384,MLB=0,MRB=0,PMLB=0;
 static u8  MCY=0; static i8 MBF[3]={0}; static int MOUSE_READY=0;
 static u8  K_SH=0, K_CP=0;
-static char kb_buf[128] = {0}; static int kb_len = 0; /* Klavye Buffer'ı (AI için) */
+static char kb_buf[128] = {0}; static int kb_len = 0; 
 
 static const char SCMAP[128]={ 0,27,'1','2','3','4','5','6','7','8','9','0','-','=',8,'\t','q','w','e','r','t','y','u','i','o','p','[',']','\n',0,'a','s','d','f','g','h','j','k','l',';','\'','`',0,'\\','z','x','c','v','b','n','m',',','.','/',0,'*',0,' ',0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,'-',0,0,0,'+',0,0,0,0,0,0,0,0,0 };
 
 static u8 kbd_poll(void){
-    u8 st=inb(0x64); if(!(st&0x01)) return 0;
+    u8 st=inb(0x64); 
+    if(!(st&0x01)) return 0;
     if((st&0x20)){ inb(0x60); return 0; } 
     u8 sc=inb(0x60);
-    if(sc&0x80){ u8 r=sc&0x7F; if(r==0x2A||r==0x36) K_SH=0; return 0; }
-    if(sc==0x2A||sc==0x36){K_SH=1;return 0;} if(sc==0x3A){K_CP=!K_CP;return 0;} if(sc>=128) return 0;
-    char c=SCMAP[sc]; if(!c) return 0;
+    if(sc&0x80){ u8 r=sc&0x7F; if(r==0x2A||r==0x36) { K_SH=0; } return 0; }
+    if(sc==0x2A||sc==0x36){K_SH=1;return 0;} 
+    if(sc==0x3A){K_CP=!K_CP;return 0;} 
+    if(sc>=128) return 0;
+    char c=SCMAP[sc]; 
+    if(!c) return 0;
     if(c>='a'&&c<='z'){ if(K_SH^K_CP) c-=32; }
     else if(K_SH){
         switch(c){ case '1':c='!';break; case '2':c='@';break; case '3':c='#';break; case '4':c='$';break; case '5':c='%';break; case '6':c='^';break; case '7':c='&';break; case '8':c='*';break; case '9':c='(';break; case '0':c=')';break; case '-':c='_';break; case '=':c='+';break; case '[':c='{';break; case ']':c='}';break; case ';':c=':';break; case '\'':c='"';break;case ',':c='<';break; case '.':c='>';break; case '/':c='?';break; case '`':c='~';break; case '\\':c='|';break; }
@@ -177,23 +217,34 @@ static u8 kbd_poll(void){
 static void mouse_poll(void){
     if(!MOUSE_READY) return;
     for(int iter=0;iter<16;iter++){
-        u8 st=inb(0x64); if(!(st&0x01)) break; 
+        u8 st=inb(0x64); 
+        if(!(st&0x01)) break; 
         if(!(st&0x20)){ inb(0x60); continue; }
         u8 dat=inb(0x60);
         switch(MCY){
-          case 0: if(!(dat&0x08)){MCY=0;break;} MBF[0]=(i8)dat; MCY=1; break;
-          case 1: MBF[1]=(i8)dat; MCY=2; break;
-          case 2: MBF[2]=(i8)dat; MCY=0;{
+          case 0: 
+            if(!(dat&0x08)){MCY=0;break;} 
+            MBF[0]=(i8)dat; MCY=1; break;
+          case 1: 
+            MBF[1]=(i8)dat; MCY=2; break;
+          case 2: 
+            MBF[2]=(i8)dat; MCY=0;{
             i32 dx=(i32)MBF[1], dy=(i32)MBF[2];
-            if(MBF[0]&0x10) dx|=(i32)0xFFFFFF00; if(MBF[0]&0x20) dy|=(i32)0xFFFFFF00;
-            if(MBF[0]&0x40) dx=0; if(MBF[0]&0x80) dy=0;
+            if(MBF[0]&0x10) { dx|=(i32)0xFFFFFF00; }
+            if(MBF[0]&0x20) { dy|=(i32)0xFFFFFF00; }
+            if(MBF[0]&0x40) { dx=0; }
+            if(MBF[0]&0x80) { dy=0; }
             MX+=dx; MY-=dy;
-            if(MX<0) MX=0; if(MY<0) MY=0; if(MX>=(i32)SW) MX=(i32)SW-1; if(MY>=(i32)SH) MY=(i32)SH-1;
+            if(MX<0) { MX=0; } 
+            if(MY<0) { MY=0; } 
+            if(MX>=(i32)SW) { MX=(i32)SW-1; } 
+            if(MY>=(i32)SH) { MY=(i32)SH-1; }
             PMLB=MLB; MLB=(MBF[0]&0x01)?1:0; MRB=(MBF[0]&0x02)?1:0;
           } break;
         }
     }
 }
+
 static int CLK(i32 x,i32 y,i32 w,i32 h){ return MLB&&!PMLB&&MX>=x&&MX<x+w&&MY>=y&&MY<y+h; }
 static int HOV(i32 x,i32 y,i32 w,i32 h){ return MX>=x&&MX<x+w&&MY>=y&&MY<y+h; }
 
@@ -207,7 +258,6 @@ static int app_installed[10] = {1, 1, 1, 0, 0, 0, 0, 0, 0, 0};
 static u32 app_colors[10] = {C_CYAN, C_LIME, C_PURP, C_PINK, C_YEL, C_ORNG, C_RED, C_LIME, 0, 0};
 static char* app_names[10] = {"Terminal", "Ayarlar", "Dosyalar", "Kamera", "Mesajlar", "YapayZeka", "Oyunlar", "Harita", "", ""};
 
-/* Pencere Sürükleme Verileri */
 typedef struct { int open; i32 x,y,w,h; int drag; i32 dx,dy; char title[32]; } Win;
 static Win W_FM = {0, 100, 100, 600, 400, 0,0,0, "Dosya Yoneticisi"};
 static Win W_AI = {0, 150, 150, 500, 350, 0,0,0, "Gemini Yapay Zeka"};
@@ -215,33 +265,36 @@ static Win W_IN = {0, 300, 250, 350, 180, 0,0,0, "Kurulum Sihirbazi"};
 
 static int inst_app_id = -1, inst_prog = 0; char inst_file[32]="";
 
-/* Standart Pencere Çizici */
 static void draw_win(Win *w) {
     if (!w->open) return;
     if (!w->drag && MLB && !PMLB && HOV(w->x, w->y, w->w, 30)) { w->drag=1; w->dx=MX-w->x; w->dy=MY-w->y; }
-    if (w->drag) { if(MLB){ w->x=MX-w->dx; w->y=MY-w->dy; } else w->drag=0; }
+    if (w->drag) { if(MLB){ w->x=MX-w->dx; w->y=MY-w->dy; } else { w->drag=0; } }
     glass_rr(w->x, w->y, w->w, w->h, 10, 0x1A1C20, 240);
     alpha_fr(w->x, w->y, w->w, 30, 0x000000, 150);
     ds(w->x + 10, w->y + 10, w->title, CW, 1);
     
-    /* Kapat Butonu */
     if (HOV(w->x+w->w-30, w->y+5, 20, 20)) { alpha_fr(w->x+w->w-30, w->y+5, 20, 20, C_RED, 200); }
     else { alpha_fr(w->x+w->w-30, w->y+5, 20, 20, C_RED, 100); }
     ds(w->x+w->w-24, w->y+10, "X", CW, 1);
-    if (CLK(w->x+w->w-30, w->y+5, 20, 20)) w->open = 0;
+    if (CLK(w->x+w->w-30, w->y+5, 20, 20)) { w->open = 0; }
 }
 
-/* WINDOWS TARZI KURULUM EKRANI */
 static void APP_INSTALLER(void) {
-    draw_win(&W_IN); if(!W_IN.open) return;
-    ds(W_IN.x+20, W_IN.y+50, "Dosya:", CGY, 1); ds(W_IN.x+80, W_IN.y+50, inst_file, CW, 1);
+    draw_win(&W_IN); 
+    if(!W_IN.open) return;
+    
+    ds(W_IN.x+20, W_IN.y+50, "Dosya:", CGY, 1); 
+    ds(W_IN.x+80, W_IN.y+50, inst_file, CW, 1);
     
     if (inst_prog == 0) {
         dsc(W_IN.x, W_IN.y+80, W_IN.w, "Bu uygulamayi kurmak ister misiniz?", CW, 1);
-        glass_rr(W_IN.x+70, W_IN.y+120, 80, 30, 5, C_LIME, 150); dsc(W_IN.x+70, W_IN.y+130, 80, "Evet", CW, 1);
-        glass_rr(W_IN.x+200, W_IN.y+120, 80, 30, 5, C_RED, 150); dsc(W_IN.x+200, W_IN.y+130, 80, "Hayir", CW, 1);
-        if (CLK(W_IN.x+70, W_IN.y+120, 80, 30)) inst_prog = 1;
-        if (CLK(W_IN.x+200, W_IN.y+120, 80, 30)) W_IN.open = 0;
+        glass_rr(W_IN.x+70, W_IN.y+120, 80, 30, 5, C_LIME, 150); 
+        dsc(W_IN.x+70, W_IN.y+130, 80, "Evet", CW, 1);
+        glass_rr(W_IN.x+200, W_IN.y+120, 80, 30, 5, C_RED, 150); 
+        dsc(W_IN.x+200, W_IN.y+130, 80, "Hayir", CW, 1);
+        
+        if (CLK(W_IN.x+70, W_IN.y+120, 80, 30)) { inst_prog = 1; }
+        if (CLK(W_IN.x+200, W_IN.y+120, 80, 30)) { W_IN.open = 0; }
     } else if (inst_prog < 100) {
         inst_prog += 2;
         dsc(W_IN.x, W_IN.y+80, W_IN.w, "Yukleniyor...", CW, 1);
@@ -249,53 +302,55 @@ static void APP_INSTALLER(void) {
         alpha_fr(W_IN.x+20, W_IN.y+110, (W_IN.w-40)*inst_prog/100, 20, C_LIME, 200);
     } else {
         dsc(W_IN.x, W_IN.y+80, W_IN.w, "Kurulum Basarili! Masaustune eklendi.", C_LIME, 1);
-        app_installed[inst_app_id] = 1; /* MASAÜSTÜNDE GÖZÜKSÜN */
-        glass_rr(W_IN.x+135, W_IN.y+120, 80, 30, 5, PAN_BD, 150); dsc(W_IN.x+135, W_IN.y+130, 80, "Kapat", CW, 1);
-        if (CLK(W_IN.x+135, W_IN.y+120, 80, 30)) W_IN.open = 0;
+        app_installed[inst_app_id] = 1; 
+        glass_rr(W_IN.x+135, W_IN.y+120, 80, 30, 5, PAN_BD, 150); 
+        dsc(W_IN.x+135, W_IN.y+130, 80, "Kapat", CW, 1);
+        if (CLK(W_IN.x+135, W_IN.y+120, 80, 30)) { W_IN.open = 0; }
     }
 }
 
-/* DOSYA YÖNETİCİSİ (.exe, .deb, .wind) */
 static void FILEMGR(void) {
-    draw_win(&W_FM); if(!W_FM.open) return;
+    draw_win(&W_FM); 
+    if(!W_FM.open) return;
+    
     alpha_fr(W_FM.x, W_FM.y+30, 150, W_FM.h-30, 0x000000, 100);
     ds(W_FM.x+10, W_FM.y+50, "C: Yerel Disk", CGY, 1);
-    ds(W_FM.x+10, W_FM.y+80, "D: USB Bellek", CW, 1); /* USB Varsayılan Açık */
+    ds(W_FM.x+10, W_FM.y+80, "D: USB Bellek", CW, 1); 
     
-    /* İndirilebilir Uygulamalar (USB İçinde) */
     char* files[] = {"YapayZeka.exe", "Oyunlar.wind", "Harita.deb"};
-    int f_ids[] = {5, 6, 7}; /* app_names indeksleri */
+    int f_ids[] = {5, 6, 7}; 
     
     for(int i=0; i<3; i++) {
         int fx = W_FM.x + 180 + (i%3)*120, fy = W_FM.y + 80 + (i/3)*100;
         glass_rr(fx, fy, 80, 80, 10, PAN_BD, 150);
-        alpha_fr(fx+25, fy+20, 30, 35, CW, 200); /* Dosya kağıdı */
-        if(i==0) alpha_fr(fx+25, fy+40, 30, 15, C_RED, 255); /* .exe */
-        else if(i==1) alpha_circ(fx+40, fy+35, 10, C_CYAN, 255); /* .wind */
-        else alpha_circ(fx+40, fy+35, 10, C_PURP, 255); /* .deb */
+        alpha_fr(fx+25, fy+20, 30, 35, CW, 200); 
+        
+        if(i==0) { alpha_fr(fx+25, fy+40, 30, 15, C_RED, 255); }
+        else if(i==1) { alpha_circ(fx+40, fy+35, 10, C_CYAN, 255); }
+        else { alpha_circ(fx+40, fy+35, 10, C_PURP, 255); }
         
         dsc(fx, fy+90, 80, files[i], CTXT, 1);
         
-        /* ÇİFT TIK (veya tek tık) -> KURULUM SİHİRBAZINI AÇ */
         if(CLK(fx, fy, 80, 80) && !app_installed[f_ids[i]]) {
             W_IN.open = 1; inst_prog = 0; inst_app_id = f_ids[i]; kcpy(inst_file, files[i]);
         }
     }
 }
 
-/* YAPAY ZEKA (GEMINI) UYGULAMASI */
 static char ai_reply[128] = "Merhaba, ben Wind OS icindeki AI Asistan!\nBana bir seyler yaz ve 'Enter'a bas.";
 static void AI_APP(void) {
-    draw_win(&W_AI); if(!W_AI.open) return;
-    /* Chat geçmişi ekranı */
+    draw_win(&W_AI); 
+    if(!W_AI.open) return;
+    
     glass_rr(W_AI.x+10, W_AI.y+40, W_AI.w-20, W_AI.h-100, 5, 0x000000, 150);
     ds(W_AI.x+20, W_AI.y+50, ai_reply, C_CYAN, 1);
     
-    /* Girdi Kutusu */
     glass_rr(W_AI.x+10, W_AI.y+W_AI.h-50, W_AI.w-20, 40, 5, 0x000000, 200);
     ds(W_AI.x+20, W_AI.y+W_AI.h-35, kb_buf, CW, 1);
-    /* Yanıp sönen imleç */
-    if ((inl(0x400) % 20) > 10) alpha_fr(W_AI.x+20+(kb_len*8), W_AI.y+W_AI.h-35, 8, 2, CW, 255);
+    
+    if ((inl(0x400) % 20) > 10) {
+        alpha_fr(W_AI.x+20+(kb_len*8), W_AI.y+W_AI.h-35, 8, 2, CW, 255);
+    }
 }
 
 /* ================================================================
@@ -304,18 +359,16 @@ static void AI_APP(void) {
 static i32 wx=300, wy=50; static int wdrag=0, wdx=0, wdy=0;
 
 static void DESKTOP(void){
-    /* 1. Arka Plan */
     for(i32 y=0; y<(i32)SH; y++) {
         for(i32 x=0; x<(i32)SW; x++) {
             u32 c = BG_BOT;
             if (x % 50 == 0 || y % 50 == 0) c = GRID_C;
-            back_buffer[y*SW+x] = c; /* DÜZELTME BURADA SW KULLANILDI! */
+            back_buffer[y*SW+x] = c; 
         }
     }
 
-    /* 2. Özgür (Sürüklenebilir) Hava Durumu Widget'ı */
     if(!wdrag && MLB && !PMLB && HOV(wx, wy, 420, 140)) { wdrag=1; wdx=MX-wx; wdy=MY-wy; }
-    if(wdrag) { if(MLB){ wx=MX-wdx; wy=MY-wdy; } else wdrag=0; }
+    if(wdrag) { if(MLB){ wx=MX-wdx; wy=MY-wdy; } else { wdrag=0; } }
     
     glass_rr(wx, wy, 420, 140, 20, WIDGET_BG, 200);
     alpha_circ(wx+70, wy+70, 35, 0xFFFFFF, 30);
@@ -325,54 +378,59 @@ static void DESKTOP(void){
     ds(wx+130, wy+50, "26:03", CW, 4);
     ds(wx+135, wy+90, "Istanbul - 22 C, Gunesli", CGY, 1);
 
-    /* 3. Tüm Çalışan Uygulamalar (Kurulanlar Masaüstüne Düşer) */
     int ax = 50, ay = 50;
     for(int i=0; i<10; i++) {
         if (app_installed[i]) {
             blob_icon(ax+40, ay+30, app_colors[i]);
             dsc(ax, ay+65, 80, app_names[i], CTXT, 1);
             if (CLK(ax, ay, 80, 80)) {
-                if (i == 2) W_FM.open = 1;
-                if (i == 5) W_AI.open = 1;
+                if (i == 2) { W_FM.open = 1; }
+                if (i == 5) { W_AI.open = 1; }
             }
             ay += 110;
             if (ay > SH - 150) { ay = 50; ax += 100; }
         }
     }
 
-    /* 4. Alt Asimetrik Görev Çubuğu */
     glass_rr(250, SH-80, 500, 60, 20, 0x1A1C20, 200);
-    ds(280, SH-55, "WIND OS // AI EDITION v11", CGY, 1);
+    ds(280, SH-55, "WIND OS // AI EDITION v11.1", CGY, 1);
 
-    /* 5. USB Takılı Bildirimi (En Sağ Alt) */
     if (USB_OK) {
         glass_rr(SW-160, SH-70, 140, 50, 10, PAN_BD, 150);
         alpha_circ(SW-130, SH-45, 8, C_LIME, 255);
         ds(SW-110, SH-50, "USB BAGLI", CW, 1);
     }
 
-    /* Pencereler (En üstte çizilsin diye buraya koyduk) */
     FILEMGR();
     APP_INSTALLER();
     AI_APP();
 
-    /* Fare Çizimi */
     static const u8 cur[16][12]={ {1},{1,1},{1,2,1},{1,2,2,1},{1,2,2,2,1},{1,2,2,2,2,1},{1,2,2,2,2,2,1},{1,2,2,2,2,2,2,1},{1,2,2,2,2,2,2,2,1},{1,2,2,2,2,1,1,1,1,1},{1,2,2,1,2,2,1},{1,2,1,0,1,2,2,1},{1,1,0,0,1,2,2,1},{0,0,0,0,0,1,2,2,1},{0,0,0,0,0,1,2,2,1},{0,0,0,0,0,0,1,1} };
-    for(int r=0;r<16;r++) for(int c=0;c<12;c++){ if(cur[r][c]==1) alpha_pp(MX+c, MY+r, CW, 255); else if(cur[r][c]==2) alpha_pp(MX+c, MY+r, CK, 255); }
+    for(int r=0;r<16;r++) {
+        for(int c=0;c<12;c++) {
+            if(cur[r][c]==1) { alpha_pp(MX+c, MY+r, CW, 255); } 
+            else if(cur[r][c]==2) { alpha_pp(MX+c, MY+r, CK, 255); }
+        }
+    }
 }
 
 /* ================================================================
    KERNEL_MAIN
    ================================================================ */
 void kernel_main(multiboot_info_t *mbi){
-    u8 bpp  = mbi->framebuffer_bpp; if(bpp==0) bpp=32; 
+    u8 bpp  = mbi->framebuffer_bpp; 
+    if(bpp==0) { bpp=32; } 
     u32 Bpp = (u32)bpp / 8;
+    
     FB  = (volatile u32*)(u32)mbi->framebuffer_addr; 
     SW  = mbi->framebuffer_width; 
     SH  = mbi->framebuffer_height; 
     SP  = mbi->framebuffer_pitch / Bpp;
     
-    if(!FB || SW==0){ FB=(volatile u32*)0xFD000000u; SW=1024; SH=768; SP=1024; }
+    if(!FB || SW==0){ 
+        FB=(volatile u32*)0xFD000000u; 
+        SW=1024; SH=768; SP=1024; 
+    }
     
     outb(0x64,0xA8); outb(0x64,0x20); while(!(inb(0x64)&0x01)); u8 cfg=inb(0x60);
     cfg|=0x02; cfg&=~0x20; outb(0x64,0x60); outb(0x60,cfg);
@@ -382,36 +440,19 @@ void kernel_main(multiboot_info_t *mbi){
     MOUSE_READY=1;
     
     while(1){ 
-        /* Klavye Yakalama */
         u8 key = kbd_poll();
         if (W_AI.open && key != 0) {
-            if (key == 8 && kb_len > 0) { kb_buf[--kb_len] = 0; } /* Backspace */
+            if (key == 8 && kb_len > 0) { kb_buf[--kb_len] = 0; } 
             else if (key == '\n') { 
                 kcpy(ai_reply, "Gemini: Soru harika! Ama henuz dis dunya ile\ninternet baglantim yok. Ben cekirdege gomuluyum.");
                 kb_len = 0; kb_buf[0] = 0;
             }
-            else if (key >= 32 && key <= 126 && kb_len < 40) { kb_buf[kb_len++] = key; kb_buf[kb_len] = 0; }
-        }
-
-        /* Fare Yakalama */
-        for(int iter=0;iter<16;iter++){
-            u8 st=inb(0x64); if(!(st&0x01)) break; 
-            if(!(st&0x20)){ inb(0x60); continue; }
-            u8 dat=inb(0x60);
-            switch(MCY){
-              case 0: if(!(dat&0x08)){MCY=0;break;} MBF[0]=(i8)dat; MCY=1; break;
-              case 1: MBF[1]=(i8)dat; MCY=2; break;
-              case 2: MBF[2]=(i8)dat; MCY=0;{
-                i32 dx=(i32)MBF[1], dy=(i32)MBF[2];
-                if(MBF[0]&0x10) dx|=(i32)0xFFFFFF00; if(MBF[0]&0x20) dy|=(i32)0xFFFFFF00;
-                if(MBF[0]&0x40) dx=0; if(MBF[0]&0x80) dy=0;
-                MX+=dx; MY-=dy;
-                if(MX<0) MX=0; if(MY<0) MY=0; if(MX>=(i32)SW) MX=(i32)SW-1; if(MY>=(i32)SH) MY=(i32)SH-1;
-                PMLB=MLB; MLB=(MBF[0]&0x01)?1:0; MRB=(MBF[0]&0x02)?1:0;
-              } break;
+            else if (key >= 32 && key <= 126 && kb_len < 40) { 
+                kb_buf[kb_len++] = key; kb_buf[kb_len] = 0; 
             }
         }
-        
+
+        mouse_poll();
         DESKTOP(); 
         swap_buffers(); 
     }
