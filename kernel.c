@@ -1,6 +1,6 @@
 /*
- * Wind OS  -  kernel.c  v9.9 Matrix Fix & True USB Disconnect Detector
- * Lead Developer: WindOS Team
+ * Wind OS  -  kernel.c  v10.0 Originality Edition (Top Drawer & 4D Flip)
+ * Lead Developer: Efe (WindOS Team)
  */
 #include "kernel.h"
 
@@ -16,8 +16,11 @@ static u32 SW = 1024, SH = 768, SP = 1024;
 static u32 back_buffer[1024 * 768];
 
 static OS_State gST = STATE_DESKTOP;
-static int VBOX_FLIP = 1; /* VIRTUALBOX TERS EKRAN DÜZELTİCİSİ */
 
+/* VIRTUALBOX 4 BOYUTLU EKRAN DÜZELTİCİSİ (0=Normal, 1=Ters X, 2=Ters Y, 3=Tam Ters) */
+static int FLIP_MODE = 3; 
+
+/* RENK PALETI */
 #define CW       0xFFFFFFFFu 
 #define CK       0xFF000000u 
 #define BG_BASE  0xFF101214u 
@@ -85,18 +88,15 @@ static void dc(i32 x,i32 y,char ch,u32 fg,u32 bg,i32 sc){ if((u8)ch>=128) ch='?'
 static void ds(i32 x,i32 y,const char*s,u32 fg,u32 bg,i32 sc){ while(*s){ if(*s=='\n'){x=0;y+=8*sc+2;} else{dc(x,y,*s,fg,bg,sc);x+=8*sc;} s++; } }
 static void dsc(i32 x,i32 y,i32 w,const char*s,u32 fg,u32 bg,i32 sc){ i32 tw=(i32)klen(s)*8*sc; if(tw<w) ds(x+(w-tw)/2,y,s,fg,bg,sc); else ds(x,y,s,fg,bg,sc); }
 
-/* VIRTUALBOX AYNA/TERS DÜZELTİCİSİ (V9.9 YENİ MATEMATİK) */
+/* VIRTUALBOX 4 BOYUTLU EKRAN DÜZELTİCİSİ (Ayna Hatası Çözümü) */
 static void swap_buffers(void) { 
-    if (VBOX_FLIP) {
-        /* Sadece Y eksenini (satırları) takla attırır. Harfler aynalanmaz! */
-        for(u32 y = 0; y < SH; y++) {
-            for(u32 x = 0; x < SW; x++) {
-                FB[y * SW + x] = back_buffer[(SH - 1 - y) * SW + x];
-            }
+    u32 total = SW * SH; 
+    for(u32 y = 0; y < SH; y++) {
+        for(u32 x = 0; x < SW; x++) {
+            u32 src_x = (FLIP_MODE & 1) ? (SW - 1 - x) : x;
+            u32 src_y = (FLIP_MODE & 2) ? (SH - 1 - y) : y;
+            FB[y * SW + x] = back_buffer[src_y * SW + src_x];
         }
-    } else {
-        u32 total = SW * SH; 
-        for(u32 i = 0; i < total; i++) FB[i] = back_buffer[i];
     }
 }
 
@@ -109,8 +109,8 @@ static u8 kbd_poll(void){
     if(sc==0x2A||sc==0x36){K_SH=1;return 0;} if(sc==0x3A){K_CP=!K_CP;return 0;} if(sc>=128) return 0; 
     char c=SCMAP[sc]; if(!c) return 0; 
     
-    /* F Tuşuna Basınca Ekranı Döndür! */
-    if (c == 'f' || c == 'F') { VBOX_FLIP = !VBOX_FLIP; }
+    /* F Tuşuna Basınca Ekran Modunu Değiştir (0'dan 3'e kadar döner) */
+    if (c == 'f' || c == 'F') { FLIP_MODE = (FLIP_MODE + 1) % 4; }
 
     if(c>='a'&&c<='z'){ if(K_SH^K_CP) c-=32; } 
     return (u8)c; 
@@ -141,9 +141,11 @@ static void mouse_poll(void){
                     if(MBF[0] & 0x10) dx |= (i32)0xFFFFFF00; 
                     if(MBF[0] & 0x20) dy |= (i32)0xFFFFFF00; 
 
-                    MX += dx; 
-                    /* Ekran ters çevrildiyse farenin Y ekseni de fiziksel olarak ters algılanmalıdır */
-                    if (VBOX_FLIP) { MY += dy; } else { MY -= dy; }
+                    /* Faremizi Ekranin Flip Moduna Gore Otomatik Esle */
+                    if (FLIP_MODE & 1) dx = -dx;
+                    if (FLIP_MODE & 2) dy = -dy;
+
+                    MX += dx; MY -= dy;
 
                     if(MX < 0) MX = 0; if(MY < 0) MY = 0; 
                     if(MX >= (i32)SW) MX = (i32)SW - 1; 
@@ -159,103 +161,67 @@ static int HOV(i32 x,i32 y,i32 w,i32 h){ return MX>=x&&MX<x+w&&MY>=y&&MY<y+h; }
 static void CUR(void){ static const u8 cur[13][9]={ {1,0,0,0,0,0,0,0,0},{1,1,0,0,0,0,0,0,0},{1,2,1,0,0,0,0,0,0},{1,2,2,1,0,0,0,0,0},{1,2,2,2,1,0,0,0,0},{1,2,2,2,2,1,0,0,0},{1,2,2,2,2,2,1,0,0},{1,2,2,2,2,2,2,1,0},{1,2,2,2,2,2,2,2,1},{1,2,2,2,2,1,1,1,1},{1,2,2,1,2,2,1,0,0},{1,2,1,0,1,2,2,1,0},{1,1,0,0,1,2,2,1,0} }; for(int r=0;r<13;r++) for(int c=0;c<9;c++){ i32 px=MX+c, py=MY+r; if((u32)px>=SW||(u32)py>=SH) continue; if(cur[r][c]==1) pp(px,py,CW); else if(cur[r][c]==2) pp(px,py,CK); } }
 
 /* ========================================================================= */
-/* V9.9 ATA PIO & GERÇEK USB ÇIKARMA ALGILAYICISI                            */
+/* ATA PIO & GERÇEK USB KONTROL MOTORU                                       */
 /* ========================================================================= */
 typedef struct { char n[15]; int is_dir; } FAT_File;
 static FAT_File fat32_files[16];
 static int fat32_file_count = 0;
 static int DISK_READ_SUCCESS = 0;
-static int REAL_USB_DETECTED = 0; /* Sadece port kontrolü için */
-
-static u32 pci_rd(u8 bus,u8 dev,u8 fn,u8 off){ outl(0xCF8,0x80000000u|((u32)bus<<16)|((u32)dev<<11)|((u32)fn<<8)|(off&0xFC)); return inl(0xCFC); }
-static void pci_scan_usb(void){
-    REAL_USB_DETECTED = 0;
-    for(int b=0; b<4; b++) for(int d=0; d<32; d++) {
-        u32 id = pci_rd(b, d, 0, 0); if((id & 0xFFFF) == 0xFFFF) continue;
-        u32 cls = pci_rd(b, d, 0, 8); 
-        if((u8)(cls >> 24) == 0x0C && (u8)(cls >> 16) == 0x03) REAL_USB_DETECTED = 1; /* Anakart Soketi Var */
-    }
-}
 
 static int ata_read_sector(u32 lba, u8* buffer) {
     u32 timeout = 100000;
     while((inb(0x1F7) & 0x80) && timeout) timeout--;
-    if(!timeout) return 0; /* Aygıt Zaman Aşımı (USB Yok veya Çıkarılmış) */
-    
-    outb(0x1F6, 0xE0 | ((lba >> 24) & 0x0F)); 
-    outb(0x1F2, 1);                           
-    outb(0x1F3, (u8) lba); outb(0x1F4, (u8)(lba >> 8)); outb(0x1F5, (u8)(lba >> 16));
-    outb(0x1F7, 0x20);                        
-    
+    if(!timeout) return 0; 
+    outb(0x1F6, 0xE0 | ((lba >> 24) & 0x0F)); outb(0x1F2, 1);                           
+    outb(0x1F3, (u8) lba); outb(0x1F4, (u8)(lba >> 8)); outb(0x1F5, (u8)(lba >> 16)); outb(0x1F7, 0x20);                        
     timeout = 100000;
     while(!(inb(0x1F7) & 0x08) && timeout) timeout--;
-    if(!timeout) return 0; /* Veri gelmedi (USB Çıkarılmış) */
-    
+    if(!timeout) return 0; 
     for(int i = 0; i < 256; i++) {
-        u16 word = inw(0x1F0);
-        buffer[i * 2] = (u8)(word & 0xFF); buffer[i * 2 + 1] = (u8)(word >> 8);
+        u16 word = inw(0x1F0); buffer[i * 2] = (u8)(word & 0xFF); buffer[i * 2 + 1] = (u8)(word >> 8);
     }
     return 1;
 }
 
 static void fat32_scan(void) {
-    fat32_file_count = 0; DISK_READ_SUCCESS = 0;
-    u8 buf[512];
-    
-    /* Eğer sektör 0 okunamıyorsa (örneğin donanım takılı değilse), anında çık! */
+    fat32_file_count = 0; DISK_READ_SUCCESS = 0; u8 buf[512];
     if(!ata_read_sector(0, buf)) return;
     if(buf[510] != 0x55 || buf[511] != 0xAA) return; 
-    
     u32 part_lba = 0;
     if(buf[0] != 0xEB && buf[0] != 0xE9) { 
         part_lba = *(u32*)(&buf[0x1BE + 8]); 
         if(!ata_read_sector(part_lba, buf)) return;
         if(buf[510] != 0x55 || buf[511] != 0xAA) return;
     }
-    
-    u16 rsvd_sec_cnt = *(u16*)(&buf[14]);
-    u8 num_fats = buf[16];
-    u32 fat_size = *(u32*)(&buf[36]);
-    if(fat_size == 0) fat_size = *(u16*)(&buf[22]); 
-    
+    u16 rsvd_sec_cnt = *(u16*)(&buf[14]); u8 num_fats = buf[16];
+    u32 fat_size = *(u32*)(&buf[36]); if(fat_size == 0) fat_size = *(u16*)(&buf[22]); 
     u32 root_dir_lba = part_lba + rsvd_sec_cnt + (num_fats * fat_size);
     if(!ata_read_sector(root_dir_lba, buf)) return;
-    
-    DISK_READ_SUCCESS = 1; /* GERÇEK USB İÇERİĞİ BULUNDU! */
-    
+    DISK_READ_SUCCESS = 1; 
     for(int i=0; i<512; i+=32) {
-        if(buf[i] == 0x00) break; 
-        if((u8)buf[i] == 0xE5) continue; 
-        if(buf[i+11] == 0x0F) continue; 
-        
+        if(buf[i] == 0x00) break; if((u8)buf[i] == 0xE5) continue; if(buf[i+11] == 0x0F) continue; 
         char name[16]; int n=0;
         for(int j=0; j<8; j++) if(buf[i+j] != ' ') name[n++] = buf[i+j];
-        
-        if(buf[i+8] != ' ' && !(buf[i+11] & 0x10)) {
-            name[n++] = '.';
-            for(int j=8; j<11; j++) if(buf[i+j] != ' ') name[n++] = buf[i+j];
-        }
+        if(buf[i+8] != ' ' && !(buf[i+11] & 0x10)) { name[n++] = '.'; for(int j=8; j<11; j++) if(buf[i+j] != ' ') name[n++] = buf[i+j]; }
         name[n] = 0;
-        
-        if(n>0) {
-            kcpy(fat32_files[fat32_file_count].n, name);
-            fat32_files[fat32_file_count].is_dir = (buf[i+11] & 0x10) ? 1 : 0;
-            fat32_file_count++;
-            if(fat32_file_count >= 16) break; 
-        }
+        if(n>0) { kcpy(fat32_files[fat32_file_count].n, name); fat32_files[fat32_file_count].is_dir = (buf[i+11] & 0x10) ? 1 : 0; fat32_file_count++; if(fat32_file_count >= 16) break; }
     }
 }
 
 /* ========================================================================= */
-/* UYGULAMA MANTIĞI VE ARAYÜZ (WIN11 EXPLORER)                               */
+/* UYGULAMA MANTIĞI VE ARAYÜZ                                                */
 /* ========================================================================= */
 typedef struct{char n[20];int inst;u32 col;} App;
-static App AP[8]={ {"Mesajlar",1,0xFF0078D4u}, {" Ayarlar",1,CGY}, {"Terminal",0,CGN}, {"Kamera",1,0xFFE91E63u}, {"Harita",1,0xFFFF9800u}, {"Muzik",1,0xFF00BCD4u}, {"Tarayici",0,0xFF03A9F4u}, {"Sistem",1,0xFF8B008Bu} };
+static App AP[9]={ 
+    {"Dosyalar",1,COR}, {"Terminal",0,CGN}, {"Tarayici",0,0xFF03A9F4u}, 
+    {"Ayarlar",1,CGY}, {"Mesajlar",1,0xFF0078D4u}, {"Kamera",1,0xFFE91E63u}, 
+    {"Harita",1,0xFFFF9800u}, {"Muzik",1,0xFF00BCD4u}, {"Sistem",1,0xFF8B008Bu} 
+};
 
 static int FO=0, FU=0, FS=-1; 
 static i32 FX=100, FY=80, FD=0, FDX=0, FDY=0;
 static int INSTALLING=0, INSTALL_PROG=0; 
-static int TERM_OPEN=0;
+static int TERM_OPEN=0, DRAWER_OPEN=0;
 static int TX=450, TY=150, TDrag=0, TDX=0, TDY=0;
 
 static void DRAW_WINDOW(i32 x, i32 y, i32 w, i32 h, const char* title, u32 b_col) {
@@ -271,8 +237,7 @@ static void FILEMGR(void){
     if(FD){ if(MLB){ FX=MX-FDX; FY=MY-FDY; if(FX<0)FX=0; if(FY<0)FY=0; if(FX>(i32)SW-fw)FX=(i32)SW-fw; if(FY>(i32)SH-fh)FY=(i32)SH-fh; } else FD=0; }
     
     rr(fx, fy, fw, fh, 8, PAN_BG); rb(fx, fy, fw, fh, PAN_BD, 1);
-    
-    dsc(fx+15, fy+15, fw, "Dosya Gezgini - WindOS V9.9 (Real Disconnect Fix)", CTXT, 0, 1);
+    dsc(fx+15, fy+15, fw, "Dosya Gezgini - WindOS", CTXT, 0, 1);
     if(CLK(fx+fw-45, fy+5, 40, 30)) { FO=0; }
     fr(fx+fw-40, fy+10, 30, 20, HOV(fx+fw-40, fy+10, 30, 20) ? CRD : PAN_BG);
     ds(fx+fw-28, fy+16, "X", CW, 0, 1);
@@ -294,12 +259,7 @@ static void FILEMGR(void){
     rr(fx+15, fy+245, sb-30, 40, 6, !FU ? PAN_BD : SIDEBAR);
     ds(fx+30, fy+260, "Yerel Disk (C:)", CW, 0, 1);
 
-    /* GERÇEK DOSYA OKUMA MOTORU TETİKLEYİCİSİ */
-    if(CLK(fx+15, fy+290, sb-30, 40)) { 
-        FU=1; 
-        pci_scan_usb(); /* Sadece soket var mı diye bakar */
-        fat32_scan();   /* Cihazın GERÇEKTEN takılı olup olmadığını denetler */
-    }
+    if(CLK(fx+15, fy+290, sb-30, 40)) { FU=1; fat32_scan(); }
     rr(fx+15, fy+290, sb-30, 40, 6, FU ? PAN_BD : SIDEBAR);
     circ(fx+35, fy+310, 5, WIN_BLUE);
     ds(fx+50, fy+305, "USB Surucu (D:)", CW, 0, 1);
@@ -308,18 +268,14 @@ static void FILEMGR(void){
     
     if (FU) {
         if (DISK_READ_SUCCESS) {
-            /* USB İÇİNDEKİ GERÇEK DOSYALARI DİNAMİK OLARAK ÇİZ! */
             for(int i=0; i < fat32_file_count; i++){
                 i32 ex = cx2 + (i%4)*120, ey = cy2 + (i/4)*110;
                 if(ex+90 > fx+fw || ey+90 > fy+fh) continue;
                 u32 bg = (FS==i) ? PAN_BD : PAN_BG;
                 rr(ex, ey, 90, 80, 4, bg);
 
-                if(fat32_files[i].is_dir){ 
-                    fr(ex+25, ey+18, 18, 12, COR); rr(ex+15, ey+26, 60, 36, 4, COR);
-                } else { 
-                    rr(ex+33, ey+15, 24, 30, 2, CW); fr(ex+37, ey+35, 16, 2, WIN_BLUE); 
-                }
+                if(fat32_files[i].is_dir){ fr(ex+25, ey+18, 18, 12, COR); rr(ex+15, ey+26, 60, 36, 4, COR); } 
+                else { rr(ex+33, ey+15, 24, 30, 2, CW); fr(ex+37, ey+35, 16, 2, WIN_BLUE); }
                 
                 dsc(ex, ey+70, 90, fat32_files[i].n, CTXT, 0, 1);
 
@@ -327,20 +283,14 @@ static void FILEMGR(void){
                     FS = i;
                     int isExe = is_ext(fat32_files[i].n, ".exe");
                     int isDeb = is_ext(fat32_files[i].n, ".deb");
-                    if(isExe && !AP[6].inst) { INSTALLING = 1; INSTALL_PROG = 0; }
-                    if(isDeb && !AP[2].inst) { INSTALLING = 2; INSTALL_PROG = 0; }
+                    if(isExe && !AP[2].inst) { INSTALLING = 1; INSTALL_PROG = 0; }
+                    if(isDeb && !AP[1].inst) { INSTALLING = 2; INSTALL_PROG = 0; }
                 }
             }
             if(fat32_file_count == 0) ds(cx2, cy2, "USB Surucusu Bos veya Klasor Bulunamadi.", CGY, 0, 1);
         } else {
-            /* USB FİZİKSEL OLARAK ÇIKARILDIYSA BURASI ÇALIŞIR! */
-            if (REAL_USB_DETECTED) {
-                ds(cx2, cy2, "USB CIKARTILDI VEYA OKUNAMIYOR!", CRD, 0, 1);
-                ds(cx2, cy2+25, "Anakartta USB portu bulundu fakat icinde gecerli bir", CGY, 0, 1);
-                ds(cx2, cy2+40, "veri/medya tespit edilemedi.", CGY, 0, 1);
-            } else {
-                ds(cx2, cy2, "USB KONTROLCUSU BULUNAMADI!", CRD, 0, 1);
-            }
+            ds(cx2, cy2, "USB CIKARTILDI VEYA OKUNAMIYOR!", CRD, 0, 1);
+            ds(cx2, cy2+25, "ATA kontrolcusu fiziksel baglantiyi kopardiginizi onayladi.", CGY, 0, 1);
         }
     } else {
         char* l_names[] = {"Sistem", "Projeler", "Kullanicilar"};
@@ -353,45 +303,65 @@ static void FILEMGR(void){
     }
 }
 
-static void BTN_V8(i32 x, i32 y, i32 w, i32 h, const char* lbl, u32 col) {
-    rr(x, y, w, h, 8, PAN_BG); 
-    rb(x, y, w, h, PAN_BD, 1); 
-    fr(x + w/2 - 15, y + 15, 30, 20, col); 
-    dsc(x, y + 45, w, lbl, CTXT, 0, 1);
-}
-
 static void TERMINAL(void) {
     if(!TERM_OPEN) return; 
-    
     i32 TW=550, TH=380;
     if (!TDrag && MLB && !PMLB && MY >= TY && MY < TY + 35 && MX >= TX && MX < TX + TW-40) { TDrag = 1; TDX = MX - TX; TDY = MY - TY; }
     if (TDrag) { if (MLB) { TY -= MY-MY; TX = MX - TDX; TY = MY - TDY; if(TX<0)TX=0; if(TY<0)TY=0; if(TX>SW-TW)TX=SW-TW; if(TY>SH-TH)TY=SH-TH; } else TDrag = 0; }
-    
-    DRAW_WINDOW(TX, TY, TW, TH, "Wind Terminal V2 (Root)", CK);
+    DRAW_WINDOW(TX, TY, TW, TH, "Wind Terminal V2", CK);
     rr(TX+15, TY+50, TW-30, TH-65, 5, CK); 
-    ds(TX+25, TY+60, "> WindOS V9.9 - ATA PIO Disconnect Guard Ready", CGN, 0, 1); 
+    ds(TX+25, TY+60, "> WindOS V10.0 - Top Drawer UX Active", CGN, 0, 1); 
+    if(CLK(TX+TW-45, TY+5, 40, 30)) TERM_OPEN = 0;
 }
 
 static void DESKTOP(void){
     fr(0, 0, (i32)SW, (i32)SH, BG_BASE);
-    fr(0, SH-45, SW, 45, TASKBAR); fr(0, SH-45, SW, 1, CK); 
-    rr(15, SH-38, 30, 30, 6, WIN_BLUE); 
-    ds(SW-130, SH-28, "WindOS V9.9", CTXT, 0, 1);
     
-    if(CLK(30,30,80,70)) { FO=!FO; } 
-    rr(30, 30, 80, 70, 8, PAN_BG); rb(30, 30, 80, 70, PAN_BD, 1); 
-    fr(55, 45, 14, 10, COR); rr(45, 52, 50, 30, 4, COR); 
-    dsc(30, 85, 80, "Dosyalar", CTXT, 0, 1);
+    /* YENI NESİL: Üst Ortadan Açılan Çekmece (Drop-down Drawer) */
+    i32 dw = 600, dh = 350;
+    i32 dx = (SW - dw) / 2;
     
-    if(AP[2].inst) {
-        if(CLK(30,120,80,70)) { TERM_OPEN=!TERM_OPEN; }
-        BTN_V8(30, 120, 80, 70, "Terminal", CGN);
+    if (DRAWER_OPEN) {
+        /* Çekmece Gövdesi */
+        fr(dx+5, 0, dw, dh+5, SHADOW); 
+        rr(dx, 0, dw, dh, 12, SIDEBAR);
+        rb(dx, 0, dw, dh, PAN_BD, 2);
+        
+        /* Çekmece Kapatma Butonu (Aşağıda) */
+        rr(dx + dw/2 - 40, dh - 20, 80, 10, 4, PAN_BD);
+        if(CLK(dx, 0, dw, dh)) { /* Eger bosluga tiklarsa acik kalsin, baska bir yere tiklarsa kapansin mantigi da yapilabilir */ }
+        if(CLK(dx + dw/2 - 50, dh - 30, 100, 30)) DRAWER_OPEN = 0;
+        
+        /* İkonları Çekmece İçine Çiz (Klasik Masaüstü İkonlarını Sildik) */
+        for(int i=0; i<9; i++) {
+            if(!AP[i].inst) continue;
+            i32 ix = dx + 30 + (i%5)*110; 
+            i32 iy = 40 + (i/5)*120;
+            
+            rr(ix, iy, 90, 80, 8, HOV(ix, iy, 90, 80) ? PAN_BD : PAN_BG);
+            if(i==0) { /* Dosyalar İkonu (Özel Çizim) */
+                fr(ix+35, iy+20, 14, 10, AP[i].col); rr(ix+25, iy+28, 40, 24, 4, AP[i].col);
+            } else {
+                fr(ix+30, iy+25, 30, 20, AP[i].col);
+            }
+            dsc(ix, iy+70, 90, AP[i].n, CTXT, 0, 1);
+            
+            /* Tıklama Olayları */
+            if(CLK(ix, iy, 90, 80)) {
+                if(i == 0) FO = !FO; /* Dosyalar */
+                if(i == 1) TERM_OPEN = !TERM_OPEN; /* Terminal */
+                DRAWER_OPEN = 0; /* Uygulama açılınca çekmece otomatik kapansın */
+            }
+        }
+    } else {
+        /* Çekmeceyi Açma Kulpu (Handle) */
+        rr(SW/2 - 60, -10, 120, 30, 8, SIDEBAR);
+        rb(SW/2 - 60, -10, 120, 30, PAN_BD, 1);
+        ds(SW/2 - 4, 8, "v", CGY, 0, 1);
+        if(CLK(SW/2 - 60, 0, 120, 30)) DRAWER_OPEN = 1;
     }
-    
+
     FILEMGR(); TERMINAL();
-    
-    /* Masaüstü bilgi notu - Yeni Kullanıcı Deneyimi */
-    ds(SW-300, 20, "Ekran Ters Ise 'F' Tusuna Basiniz", CGY, 0, 1);
     
     if(INSTALLING) {
         i32 px = SW/2 - 180, py = SH/2 - 70;
@@ -401,8 +371,8 @@ static void DESKTOP(void){
         rr(px+30, py+90, 300, 20, 5, CK); rr(px+30, py+90, INSTALL_PROG * 3, 20, 5, CW); 
         INSTALL_PROG += 1;
         if(INSTALL_PROG >= 100) { 
-            if(INSTALLING == 1) { AP[6].inst = 1; } 
-            if(INSTALLING == 2) { AP[2].inst = 1; } 
+            if(INSTALLING == 1) AP[2].inst = 1; /* Tarayıcı */ 
+            if(INSTALLING == 2) AP[1].inst = 1; /* Terminal */ 
             INSTALLING = 0; 
         }
     }
