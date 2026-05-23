@@ -1,5 +1,5 @@
 /*
- * Wind OS  -  kernel.c  v9.2 Robust Final (Görsel ve Derleme Hataları Düzeltildi)
+ * Wind OS  -  kernel.c  v9.3 Ethernet Dev Edition (Gerçek RTL8139 MAC Okuma)
  * Lead Developer: WindOS Team
  */
 #include "kernel.h"
@@ -17,26 +17,23 @@ static u32 back_buffer[1024 * 768];
 
 static OS_State gST = STATE_DESKTOP;
 static OS_State pST = STATE_DESKTOP;
-static int DIRTY = 1;
 
-/* modern fluent RENK PALETİ (V9 Modern Stil) */
-#define CW       0xFFFFFFFFu /* Beyaz */
-#define CK       0xFF000000u /* Siyah Arkaplan */
-#define BG_BASE  0xFF101214u /* Koyu Arka Plan */
-#define TASKBAR  0xDD181A1Fu /* Görev Çubuğu */
-#define PAN_BG   0xFF202225u /* Pencere Arkaplanı */
-#define PAN_BD   0xFF36393Fu /* Pencere Sınırı */
-#define SHADOW   0xFF08090Au /* Pencere Gölgesi (Derinlik Hissi) */
-#define CTXT     0xFFE3E5E8u /* Ana Metin */
-#define CGY      0xFF99AAB5u /* Gri Metin */
-
-/* --- TERMİNAL HATALARI DÜZELTİMİ (Missing Defines) --- */
-#define WIN_BLUE 0xFF0078D7u /* Windows Blue (EXE Yükleyici) */
-#define LIN_ORG  0xFFE95420u /* Linux Orange (DEB Yükleyici - Ubuntu) */
-#define COR      0xFFFEE75Cu /* WindOS Yellow/Orange (Klasörler/Dosyalar) */
-#define CRD      0xFFED4245u /* Red (Kapat Butonu) */
-#define CBL      0xFF7289DAu /* Blurple/Blue (USB Bağlı) */
-#define CGN      0xFF57F287u /* Green (Terminal Yazısı/Durum) */
+/* RENK PALETİ */
+#define CW       0xFFFFFFFFu 
+#define CK       0xFF000000u 
+#define BG_BASE  0xFF101214u 
+#define TASKBAR  0xDD181A1Fu 
+#define PAN_BG   0xFF202225u 
+#define PAN_BD   0xFF36393Fu 
+#define SHADOW   0xFF08090Au 
+#define CTXT     0xFFE3E5E8u 
+#define CGY      0xFF99AAB5u 
+#define WIN_BLUE 0xFF0078D7u 
+#define LIN_ORG  0xFFE95420u 
+#define COR      0xFFFEE75Cu 
+#define CRD      0xFFED4245u 
+#define CBL      0xFF7289DAu 
+#define CGN      0xFF57F287u 
 
 static inline u8   inb (u16 p)       {u8  v;__asm__ volatile("inb  %1,%0":"=a"(v):"Nd"(p));return v;}
 static inline void outb(u16 p, u8 v) {__asm__ volatile("outb %0,%1"::"a"(v),"Nd"(p));}
@@ -48,7 +45,7 @@ static u32 klen(const char *s){u32 n=0;while(s[n])n++;return n;}
 static void kcpy(char *d,const char *s){while(*s)*d++=*s++;*d=0;}
 static void to_hex(u32 val, char* buf) { const char* hex = "0123456789ABCDEF"; buf[0]='0'; buf[1]='x'; for(int i=7; i>=0; i--) { buf[2+i] = hex[val & 0xF]; val >>= 4; } buf[10] = 0; }
 
-/* VGA YAZI TİPİ (Robust Bitmap Font V2) */
+/* VGA YAZI TİPİ */
 static const u8 F8[128][8]={
  [' ']={0,0,0,0,0,0,0,0},['!']={0x18,0x3C,0x3C,0x18,0x18,0,0x18,0},['"']={0x36,0x36,0,0,0,0,0,0},['#']={0x36,0x7F,0x36,0x36,0x7F,0x36,0x36,0},
  ['$']={0x0C,0x3E,0x03,0x1E,0x30,0x1F,0x0C,0},['%']={0x63,0x33,0x18,0x0C,0x66,0x63,0,0},['&']={0x1C,0x36,0x1C,0x6E,0x3B,0x33,0x6E,0},['\'']={0x06,0x0C,0,0,0,0,0,0},
@@ -79,20 +76,15 @@ static void rr(i32 x,i32 y,i32 w,i32 h,i32 r,u32 c){
     if(r>w/2) r=w/2; if(r>h/2) r=h/2; fr(x+r,y,w-2*r,h,c); fr(x,y+r,r,h-2*r,c); fr(x+w-r,y+r,r,h-2*r,c); circ(x+r,y+r,r,c); circ(x+w-r-1,y+r,r,c); circ(x+r,y+h-r-1,r,c); circ(x+w-r-1,y+h-r-1,r,c);
 }
 
-/* YAZI MOTORU DÜZELTİLDİ: O patlayan V9 padding'i (boşluğu) silindi, fontlar jilet gibi */
 static void dc(i32 x,i32 y,char ch,u32 fg,u32 bg,i32 sc){
     if((u8)ch>=128) ch='?'; const u8 *g=F8[(u8)ch];
     for(i32 row=0;row<8;row++) for(i32 col=0;col<8;col++) if(g[row]&(1<<(7-col))) fr(x+col*sc,y+row*sc,sc,sc,fg);
 }
-static void ds(i32 x,i32 y,const char*s,u32 fg,u32 bg,i32 sc){
-    while(*s){ if(*s=='\n'){x=0;y+=8*sc+2;} else{dc(x,y,*s,fg,bg,sc);x+=8*sc;} s++; } /* Sade basar */
-}
-static void dsc(i32 x,i32 y,i32 w,const char*s,u32 fg,u32 bg,i32 sc){
-    i32 tw=(i32)klen(s)*8*sc; if(tw<w) ds(x+(w-tw)/2,y,s,fg,bg,sc); else ds(x,y,s,fg,bg,sc);
-}
+static void ds(i32 x,i32 y,const char*s,u32 fg,u32 bg,i32 sc){ while(*s){ if(*s=='\n'){x=0;y+=8*sc+2;} else{dc(x,y,*s,fg,bg,sc);x+=8*sc;} s++; } }
+static void dsc(i32 x,i32 y,i32 w,const char*s,u32 fg,u32 bg,i32 sc){ i32 tw=(i32)klen(s)*8*sc; if(tw<w) ds(x+(w-tw)/2,y,s,fg,bg,sc); else ds(x,y,s,fg,bg,sc); }
 static void swap_buffers(void) { u32 total = SW * SH; for(u32 i = 0; i < total; i++) FB[i] = back_buffer[i]; }
 
-/* KLAVYE VE MOUSE (Sorunsuz) */
+/* KLAVYE & MOUSE */
 static const char SCMAP[128]={ 0,27,'1','2','3','4','5','6','7','8','9','0','-','=',8,'\t','q','w','e','r','t','y','u','i','o','p','[',']','\n',0,'a','s','d','f','g','h','j','k','l',';','\'','`',0,'\\','z','x','c','v','b','n','m',',','.','/',0,'*',0,' ',0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,'-',0,0,0,'+',0,0,0,0,0,0,0,0,0 };
 static u8 K_SH=0, K_CP=0;
 static u8 kbd_poll(void){ u8 st=inb(0x64); if(!(st&0x01)) return 0; if((st&0x20)){ inb(0x60); return 0; } u8 sc=inb(0x60); if(sc&0x80){ u8 r=sc&0x7F; if(r==0x2A||r==0x36) K_SH=0; return 0; } if(sc==0x2A||sc==0x36){K_SH=1;return 0;} if(sc==0x3A){K_CP=!K_CP;return 0;} if(sc>=128) return 0; char c=SCMAP[sc]; if(!c) return 0; if(c>='a'&&c<='z'){ if(K_SH^K_CP) c-=32; } return (u8)c; }
@@ -107,48 +99,85 @@ static void mouse_poll(void){ if(!MOUSE_READY) return; for(int iter=0;iter<16;it
 static int CLK(i32 x,i32 y,i32 w,i32 h){ return MLB&&!PMLB&&MX>=x&&MX<x+w&&MY>=y&&MY<y+h; }
 static void CUR(void){ static const u8 cur[13][9]={ {1,0,0,0,0,0,0,0,0},{1,1,0,0,0,0,0,0,0},{1,2,1,0,0,0,0,0,0},{1,2,2,1,0,0,0,0,0},{1,2,2,2,1,0,0,0,0},{1,2,2,2,2,1,0,0,0},{1,2,2,2,2,2,1,0,0},{1,2,2,2,2,2,2,1,0},{1,2,2,2,2,2,2,2,1},{1,2,2,2,2,1,1,1,1},{1,2,2,1,2,2,1,0,0},{1,2,1,0,1,2,2,1,0},{1,1,0,0,1,2,2,1,0} }; for(int r=0;r<13;r++) for(int c=0;c<9;c++){ i32 px=MX+c, py=MY+r; if((u32)px>=SW||(u32)py>=SH) continue; if(cur[r][c]==1) pp(px,py,CW); else if(cur[r][c]==2) pp(px,py,CK); } }
 
-/* PCI VE USB DONANIM */
+/* ========================================================================= */
+/* EFSANEVİ PCI & AĞ SÜRÜCÜSÜ (RTL8139 MAC OKUYUCU)                          */
+/* ========================================================================= */
 static u32 pci_rd(u8 bus,u8 dev,u8 fn,u8 off){ outl(0xCF8,0x80000000u|((u32)bus<<16)|((u32)dev<<11)|((u32)fn<<8)|(off&0xFC)); return inl(0xCFC); }
-static int USB_OK=0; static char USB_HWID[32]="ID: Bilinmiyor";
+
+static int USB_OK=0; 
+static char USB_HWID[32]="ID: Bilinmiyor";
+
+static int NET_OK=0;
+static char MAC_STR[24]="AG: KART YOK";
+
 static void pci_scan(void){
-    USB_OK = 0; for(int b=0;b<4;b++) for(int d=0;d<32;d++){ u32 id=pci_rd(b,d,0,0); if((id&0xFFFF)==0xFFFF) continue; u32 cls=pci_rd(b,d,0,8); u8 cc=(u8)(cls>>24),sc2=(u8)(cls>>16); if(cc==0x0C&&sc2==0x03) { USB_OK=1; to_hex(id, USB_HWID); } }
+    USB_OK = 0;
+    NET_OK = 0;
+    for(int b=0;b<4;b++) {
+        for(int d=0;d<32;d++){
+            u32 id=pci_rd(b,d,0,0); 
+            if((id&0xFFFF)==0xFFFF) continue;
+            
+            /* 1. USB KONTROLÜ */
+            u32 cls=pci_rd(b,d,0,8); 
+            u8 cc=(u8)(cls>>24),sc2=(u8)(cls>>16); 
+            if(cc==0x0C && sc2==0x03) { 
+                USB_OK=1; 
+                to_hex(id, USB_HWID); 
+            }
+            
+            /* 2. REALTEK RTL8139 ETHERNET KONTROLÜ (GERÇEK SÜRÜCÜ) */
+            if(id == 0x813910EC) {
+                NET_OK = 1;
+                /* BAR0'dan cihazın I/O adresini alıyoruz */
+                u32 bar0 = pci_rd(b,d,0,0x10);
+                u16 io_base = (u16)(bar0 & 0xFFFC);
+                
+                /* Donanımın I/O portlarından fabrikasyon MAC adresini okuyoruz (İlk 6 byte) */
+                const char* hex = "0123456789ABCDEF";
+                int idx = 0;
+                for(int i = 0; i < 6; i++) {
+                    u8 m = inb(io_base + i);
+                    MAC_STR[idx++] = hex[m >> 4];
+                    MAC_STR[idx++] = hex[m & 0x0F];
+                    if(i < 5) MAC_STR[idx++] = ':';
+                }
+                MAC_STR[idx] = 0; /* Stringi kapat (MAC okundu!) */
+            }
+        }
+    }
 }
 
-/* --- TERMİNAL HATALARI DÜZELTİMİ (Statik Değişkenler Tanımlandı) --- */
-/* v8 Logic UYGULAMALAR (u32 Renk ile Kararlı Mod) */
+/* ========================================================================= */
+/* ARAYÜZ VE SİSTEM MANTIĞI                                                  */
+/* ========================================================================= */
+
+static int is_ext(const char *n, const char *ext) { int nl = klen(n), el = klen(ext); if(nl <= el) return 0; for(int i=0;i<el;i++) if(n[nl-el+i] != ext[i]) return 0; return 1; }
+
 typedef struct{char n[20];int inst;u32 col;} App;
-static App AP[8]={
-    {"Mesajlar",1,0xFF0078D4u}, {" Ayarlar",1,CGY},
-    {"Terminal",0,CGN},         {"Kamera",  1,0xFFE91E63u},
-    {"Harita",  1,0xFFFF9800u}, {"Muzik",   1,0xFF00BCD4u},
-    {"Tarayici",0,0xFF03A9F4u}, {"Sistem",  1,0xFF8B008Bu},
-};
+static App AP[8]={ {"Mesajlar",1,0xFF0078D4u}, {" Ayarlar",1,CGY}, {"Terminal",0,CGN}, {"Kamera",1,0xFFE91E63u}, {"Harita",1,0xFFFF9800u}, {"Muzik",1,0xFF00BCD4u}, {"Tarayici",0,0xFF03A9F4u}, {"Sistem",1,0xFF8B008Bu} };
 
 static int TERM_OPEN = 0;
-static char KBD_BUF[512] = "> WindOS Professional Dev Terminal V1\n"; static int KBD_LEN = 38;
-static int TX=450,TY=150, TDrag=0, TDX=0, TDY=0; /* Pencereler (Dragging) */
-static int FO=0, FU=0, FS=-1; /* Dosya Yöneticisi */
+static char KBD_BUF[512] = "> WindOS RTL8139 Network Driver Aktif\n"; static int KBD_LEN = 38;
+static int TX=450,TY=150, TDrag=0, TDX=0, TDY=0; 
+static int FO=0, FU=0, FS=-1; 
 static i32 FX=150, FY=100, FD=0, FDX=0, FDY=0;
-static int INSTALLING=0, INSTALL_PROG=0; /* Yükleyici (exe deb) */
+static int INSTALLING=0, INSTALL_PROG=0; 
 
-/* GÖLGELİ VE MODERN PENCERE ÇİZİMİ (Sadeleştirilmiş Kararlı V2) */
 static void DRAW_WINDOW(i32 x, i32 y, i32 w, i32 h, const char* title, u32 b_col) {
     rr(x, y, w, h, 8, b_col); rb(x, y, w, h, PAN_BD, 1);
-    fr(x, y+35, w, 1, PAN_BD); /* Başlık Ayracı */
-    dsc(x+40, y+15, w-80, title, CTXT, 0, 1); /* Sade Başlık */
+    fr(x, y+35, w, 1, PAN_BD); dsc(x+40, y+15, w-80, title, CTXT, 0, 1);
 }
 
-/* Geliştirici Terminali (.deb ile kurulacak) */
 static void TERMINAL(void) {
     if(!TERM_OPEN) return; i32 TW=550, TH=380;
     if (!TDrag && MLB && !PMLB && MY >= TY && MY < TY + 35 && MX >= TX && MX < TX + TW-40) { TDrag = 1; TDX = MX - TX; TDY = MY - TY; }
     if (TDrag) { if (MLB) { TY -= MY-MY; TX = MX - TDX; TY = MY - TDY; if(TX<0)TX=0; if(TY<0)TY=0; if(TX>SW-TW)TX=SW-TW; if(TY>SH-TH)TY=SH-TH; } else TDrag = 0; }
-    DRAW_WINDOW(TX, TY, TW, TH, "Wind Terminal V1", CK);
-    rr(TX+15, TY+50, TW-30, TH-65, 5, CK); /* Siyah İç Ekran */
-    ds(TX+25, TY+60, KBD_BUF, CGN, 0, 1); /* Yeşil Yazı */
+    DRAW_WINDOW(TX, TY, TW, TH, "Wind Terminal V2 (Root)", CK);
+    rr(TX+15, TY+50, TW-30, TH-65, 5, CK); 
+    ds(TX+25, TY+60, KBD_BUF, CGN, 0, 1); 
 }
 
-/* Dosya Yöneticisi */
 typedef struct{char n[32];int d;} FSE;
 static FSE LFS[]={ {"Sistem",1},{"Belgeler",1},{"Indirmeler",1},{"Resimler",1},{"kernel.bin",0} };
 static FSE UFS[]={ {"ChromeSetup.exe",0},{"Araclar.deb",0} }; 
@@ -164,8 +193,8 @@ static void FILEMGR(void){
     for(int i=0;i<cnt;i++){
         i32 ex=cx2+(i%4)*110, ey=cy2+(i/4)*100; if(ex+90>fx+fw || ey+90>fy+fh) continue;
         u32 bg = (FS==i) ? 0xFF4F545Cu : PAN_BG; rr(ex, ey, 90, 80, 8, bg);
-        if(en[i].d){ fr(ex+45-12, ey+30-8, 12, 10, COR); rr(ex+45-14, ey+30-4, 28, 18, 3, COR); } /* Klasor */
-        else { rr(ex+35, ey+15, 20, 25, 2, CW); /* Dosya */ }
+        if(en[i].d){ fr(ex+45-12, ey+30-8, 12, 10, COR); rr(ex+45-14, ey+30-4, 28, 18, 3, COR); } 
+        else { rr(ex+35, ey+15, 20, 25, 2, CW); }
         char sn[15]={0}; if(klen(en[i].n)>12){mcpy(sn,en[i].n,10);sn[10]='.';sn[11]='.';} else kcpy(sn,en[i].n); 
         dsc(ex, ey+60, 90, sn, CTXT, 0, 1);
         if(CLK(ex,ey,90,80)){
@@ -180,41 +209,49 @@ static void FILEMGR(void){
 
 static void BTN_V8(i32 x, i32 y, i32 w, i32 h, const char* lbl, u32 col, int active) {
     rr(x, y, w, h, 8, PAN_BG); rb(x, y, w, h, PAN_BD, 1);
-    fr(x + w/2 - 15, y + 15, 30, 20, col); /* Sade simge */
-    if(active) fr(x, y+h-4, w, 4, WIN_BLUE); /* Aktif cizgisi */
+    fr(x + w/2 - 15, y + 15, 30, 20, col); 
+    if(active) fr(x, y+h-4, w, 4, WIN_BLUE); 
     dsc(x, y + 45, w, lbl, CTXT, 0, 1);
 }
 
 static void DESKTOP(void){
     fr(0, 0, (i32)SW, (i32)SH, BG_BASE);
-    /* Taskbar (V9 Renkleri) */
+    
+    /* GÖREV ÇUBUĞU (TASKBAR) */
     fr(0, SH-40, SW, 40, TASKBAR); fr(0, SH-40, SW, 1, PAN_BD);
-    rr(10, SH-35, 25, 25, 5, WIN_BLUE); /* Baslat Simgesi */
+    rr(10, SH-35, 25, 25, 5, WIN_BLUE); 
     ds(SW-120, SH-28, "03:56 PM", CTXT, 0, 1);
 
-    /* MASAÜSTÜ KISAYOLLARI (v8 Mantığı, V9 Modern Renkler) */
+    /* YENİ: AĞ DURUMU VE GERÇEK MAC ADRESİ GÖSTERİMİ */
+    if (NET_OK) {
+        circ(SW-280, SH-20, 4, CGN); /* Yeşil Işık */
+        ds(SW-265, SH-28, MAC_STR, CGN, 0, 1); /* Gerçek MAC Ekranda! */
+    } else {
+        circ(SW-280, SH-20, 4, CRD); /* Kırmızı Işık */
+        ds(SW-265, SH-28, MAC_STR, CGY, 0, 1);
+    }
+
+    /* MASAÜSTÜ KISAYOLLARI */
     if(CLK(30,30,80,70)) FO=!FO; BTN_V8(30, 30, 80, 70, "Dosyalar", COR, FO);
     if(CLK(30,120,80,70)) {} BTN_V8(30, 120, 80, 70, " Ayarlar", CGY, 0);
     
-    /* Dinamik Uygulamalar (Kurulum Bekleyenler) */
     if(AP[2].inst) { if(CLK(30,210,80,70)) TERM_OPEN=!TERM_OPEN; BTN_V8(30, 210, 80, 70, "Terminal", CGN, TERM_OPEN); }
     if(AP[6].inst) { BTN_V8(30, 300, 80, 70, "Tarayici", AP[6].col, 0); }
 
     FILEMGR(); TERMINAL();
     
-    /* MODERN YÜKLEME EKRANI (EXE/DEB) */
     if(INSTALLING) {
         i32 px = SW/2 - 180, py = SH/2 - 70;
-        fr(px+8, py+8, 360, 140, SHADOW); /* Gölge */
+        fr(px+8, py+8, 360, 140, SHADOW); 
         rr(px, py, 360, 140, 10, INSTALLING==1 ? WIN_BLUE : LIN_ORG);
         ds(px+20, py+20, INSTALLING==1 ? "Windows Alt Sistemi (.EXE)" : "Linux Alt Sistemi (.DEB)", CW, 0, 1);
         ds(px+20, py+50, INSTALLING==1 ? "Tarayici Kuruluyor..." : "Gelistirici Araclari Aciliyor...", CW, 0, 1);
-        rr(px+30, py+90, 300, 20, 5, CK); /* Bos Bar */
-        rr(px+30, py+90, INSTALL_PROG * 3, 20, 5, CW); /* Dolu Bar */
+        rr(px+30, py+90, 300, 20, 5, CK); 
+        rr(px+30, py+90, INSTALL_PROG * 3, 20, 5, CW); 
         INSTALL_PROG += 1;
         if(INSTALL_PROG >= 100) {
-            if(INSTALLING == 1) AP[6].inst = 1; /* Tarayıcı kilidini aç */
-            if(INSTALLING == 2) AP[2].inst = 1; /* Terminal kilidini aç */
+            if(INSTALLING == 1) AP[6].inst = 1; 
+            if(INSTALLING == 2) AP[2].inst = 1; 
             INSTALLING = 0;
         }
     }
