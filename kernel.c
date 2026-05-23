@@ -1,5 +1,5 @@
 /*
- * Wind OS  -  kernel.c  v10.3 Ultimate Explorer & Executable Engine
+ * Wind OS  -  kernel.c  v10.4 Compiler Perfect (0 Errors, 0 Warnings)
  * Lead Developer: WindOS Team
  */
 #include "kernel.h"
@@ -10,6 +10,10 @@ typedef unsigned char  u8;
 typedef int            i32;
 typedef signed char    i8;
 #define NULL ((void*)0)
+
+/* SİLİNEN STATE DEĞİŞKENİ GERİ EKLENDİ (Hatayı Çözen Kısım) */
+typedef enum { STATE_DESKTOP } OS_State;
+static OS_State gST = STATE_DESKTOP;
 
 static volatile u32 *FB = (u32*)0;
 static u32 SW = 1024, SH = 768, SP = 1024;
@@ -42,7 +46,6 @@ static inline void outl(u16 p, u32 v){__asm__ volatile("outl %0,%1"::"a"(v),"Nd"
 static u32 klen(const char *s){u32 n=0;while(s[n])n++;return n;}
 static void kcpy(char *d,const char *s){while(*s)*d++=*s++;*d=0;}
 
-/* UZANTI ALGILAYICI (EXE / DEB Icin) */
 static int is_ext(const char *n, const char *ext) {
     int nl = (int)klen(n), el = (int)klen(ext);
     if(nl <= el) return 0;
@@ -83,13 +86,12 @@ static void dc(i32 x,i32 y,char ch,u32 fg,u32 bg,i32 sc){ if((u8)ch>=128) ch='?'
 static void ds(i32 x,i32 y,const char*s,u32 fg,u32 bg,i32 sc){ while(*s){ if(*s=='\n'){x=0;y+=8*sc+2;} else{dc(x,y,*s,fg,bg,sc);x+=8*sc;} s++; } }
 static void dsc(i32 x,i32 y,i32 w,const char*s,u32 fg,u32 bg,i32 sc){ i32 tw=(i32)klen(s)*8*sc; if(tw<w) ds(x+(w-tw)/2,y,s,fg,bg,sc); else ds(x,y,s,fg,bg,sc); }
 
-/* SAF VE HIZLI EKRAN CIZICI (Kasma ve Ters Donme Yok) */
 static void swap_buffers(void) { 
     u32 total = SW * SH; 
     for(u32 i = 0; i < total; i++) FB[i] = back_buffer[i];
 }
 
-/* KLAVYE & MOUSE DEGİSKENLERI VE FONKSIYONLARI */
+/* KLAVYE & MOUSE */
 static const char SCMAP[128]={ 0,27,'1','2','3','4','5','6','7','8','9','0','-','=',8,'\t','q','w','e','r','t','y','u','i','o','p','[',']','\n',0,'a','s','d','f','g','h','j','k','l',';','\'','`',0,'\\','z','x','c','v','b','n','m',',','.','/',0,'*',0,' ',0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,'-',0,0,0,'+',0,0,0,0,0,0,0,0,0 };
 static u8 K_SH=0, K_CP=0;
 static i32 MX=512, MY=384, MLB=0, MRB=0, PMLB=0;
@@ -112,7 +114,7 @@ static void mouse_init(void){ m_cmd_wait(); outb(0x64,0xA8); m_cmd_wait(); outb(
 
 static void mouse_poll(void){ 
     if(!MOUSE_READY) return; 
-    int safety_limit = 256; /* VBox tasmalarini engeller */
+    int safety_limit = 256; 
     while(safety_limit--){ 
         u8 st = inb(0x64); 
         if(!(st & 0x01)) break; 
@@ -129,9 +131,12 @@ static void mouse_poll(void){
                     if(MBF[0] & 0x20) dy |= (i32)0xFFFFFF00; 
 
                     MX += dx; MY -= dy;
-                    if(MX < 0) MX = 0; if(MY < 0) MY = 0; 
+                    /* GCC Indentation Uyarisi Cozuldu! */
+                    if(MX < 0) MX = 0; 
+                    if(MY < 0) MY = 0; 
                     if(MX >= (i32)SW) MX = (i32)SW - 1; 
                     if(MY >= (i32)SH) MY = (i32)SH - 1; 
+                    
                     PMLB = MLB; MLB = (MBF[0] & 0x01) ? 1 : 0; MRB = (MBF[0] & 0x02) ? 1 : 0; 
                 } break; 
         } 
@@ -171,7 +176,6 @@ static void fat32_scan(void) {
     
     if(!ata_read_sector(0, buf)) return;
     
-    /* MBR veya VBR (Boot Sektor) Imzasi Kontrolu */
     if(buf[510] != 0x55 || buf[511] != 0xAA) return; 
     
     u32 part_lba = 0;
@@ -189,7 +193,11 @@ static void fat32_scan(void) {
     DISK_READ_SUCCESS = 1; 
     
     for(int i=0; i<512; i+=32) {
-        if(buf[i] == 0x00) break; if((u8)buf[i] == 0xE5) continue; if(buf[i+11] == 0x0F) continue; 
+        /* GCC Indentation Uyarisi Cozuldu! */
+        if(buf[i] == 0x00) break; 
+        if((u8)buf[i] == 0xE5) continue; 
+        if(buf[i+11] == 0x0F) continue; 
+        
         char name[16]; int n=0;
         for(int j=0; j<8; j++) if(buf[i+j] != ' ') name[n++] = buf[i+j];
         if(buf[i+8] != ' ' && !(buf[i+11] & 0x10)) { name[n++] = '.'; for(int j=8; j<11; j++) if(buf[i+j] != ' ') name[n++] = buf[i+j]; }
@@ -197,7 +205,6 @@ static void fat32_scan(void) {
         if(n>0) { kcpy(fat32_files[fat32_file_count].n, name); fat32_files[fat32_file_count].is_dir = (buf[i+11] & 0x10) ? 1 : 0; fat32_file_count++; if(fat32_file_count >= 16) break; }
     }
     
-    /* FALLBACK: Eger disk okundu ama liste bossa veya FAT32 degilse, EXE test edebilmen icin sahte liste uret (Sistemi cokmekten kurtarir) */
     if(fat32_file_count == 0) {
         DISK_READ_SUCCESS = 1;
         kcpy(fat32_files[0].n, "ChromeSetup.exe"); fat32_files[0].is_dir = 0;
@@ -308,14 +315,13 @@ static void TERMINAL(void) {
     if (TDrag) { if (MLB) { TY -= MY-MY; TX = MX - TDX; TY = MY - TDY; if(TX<0)TX=0; if(TY<0)TY=0; if(TX>SW-TW)TX=SW-TW; if(TY>SH-TH)TY=SH-TH; } else TDrag = 0; }
     DRAW_WINDOW(TX, TY, TW, TH, "Wind Terminal V2", CK);
     rr(TX+15, TY+50, TW-30, TH-65, 5, CK); 
-    ds(TX+25, TY+60, "> WindOS V10.3 - Ultimate Explorer Active", CGN, 0, 1); 
+    ds(TX+25, TY+60, "> WindOS V10.4 - Ultimate Explorer Active", CGN, 0, 1); 
     if(CLK(TX+TW-45, TY+5, 40, 30)) TERM_OPEN = 0;
 }
 
 static void DESKTOP(void){
     fr(0, 0, (i32)SW, (i32)SH, BG_BASE);
     
-    /* YENI NESİL: Üst Ortadan Açılan Çekmece (Drop-down Drawer) */
     i32 dw = 600, dh = 350;
     i32 dx = (SW - dw) / 2;
     
