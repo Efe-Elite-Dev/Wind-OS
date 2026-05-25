@@ -71,7 +71,6 @@ Note: QEMU is highly recommended for the best visual experience. If you experien
 🗺️ Roadmap
 [x] V13 Stable (x86 PC): Flawless execution of core kernel modules, UI design, and universal installer.
 
-[ ] Education Break: Temporary pause in development for high school transition exams (LGS).
 
 [ ] ARM Architecture Transition: Refactoring C code for smartphone compatibility.
 
