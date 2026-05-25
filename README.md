@@ -32,8 +32,6 @@ Not: En iyi görüntü deneyimi için QEMU kullanılması tavsiye edilir. Görü
 🗺️ Yol Haritası (Roadmap)
 [x] V13 Stable (x86 PC): Çekirdeğin ana modüllerinin, UI tasarımının ve evrensel yükleyicinin hatasız çalışması.
 
-[ ] Eğitim Molası: LGS (Liselere Geçiş Sistemi) hazırlıkları için kısa bir geliştirme arası.
-
 [ ] ARM Mimarisine Geçiş: C kodlarının akıllı telefonlar için uygun hale getirilmesi.
 
 [ ] Samsung Galaxy A04s (Exynos) Portu: WindOS'un mobil cihazlarda çalışacak ilk fiziksel testi (XDA Developers üzerinden süreç paylaşılacaktır).
